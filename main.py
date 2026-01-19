@@ -23,6 +23,9 @@ from widgets import (
 from api_service import api
 from database import sync_profiles, get_profiles as db_get_profiles, update_profile_local
 
+# Import Tab Pages
+from tabs import LoginPage, PagesPage, ReelsPage, ContentPage, GroupsPage, ScriptsPage, PostsPage
+
 
 class Sidebar(QWidget):
     """Sidebar COMPACT 🐱"""
@@ -630,12 +633,37 @@ class MainWindow(QMainWindow):
         self.pages = QStackedWidget()
         self.log_panel = LogPanel()
         
+        # Profiles page (built-in)
         self.profiles_page = ProfilesPage(self.log)
         self.pages.addWidget(self.profiles_page)
-        
-        for tab_id in ["login", "pages", "reels", "content", "groups", "scripts", "posts"]:
-            page = self._create_placeholder_page(tab_id)
-            self.pages.addWidget(page)
+
+        # Login page
+        self.login_page = LoginPage(self.log)
+        self.pages.addWidget(self.login_page)
+
+        # Pages page
+        self.pages_page = PagesPage(self.log)
+        self.pages.addWidget(self.pages_page)
+
+        # Reels page
+        self.reels_page = ReelsPage(self.log)
+        self.pages.addWidget(self.reels_page)
+
+        # Content page
+        self.content_page = ContentPage(self.log)
+        self.pages.addWidget(self.content_page)
+
+        # Groups page
+        self.groups_page = GroupsPage(self.log)
+        self.pages.addWidget(self.groups_page)
+
+        # Scripts page
+        self.scripts_page = ScriptsPage(self.log)
+        self.pages.addWidget(self.scripts_page)
+
+        # Posts page
+        self.posts_page = PostsPage(self.log)
+        self.pages.addWidget(self.posts_page)
         
         main_container_layout.addWidget(self.pages)
         
@@ -676,30 +704,6 @@ class MainWindow(QMainWindow):
         self.grid.setGeometry(0, 0, w, h)
         self.rain.setGeometry(0, 0, w, h)
         self.scanlines.setGeometry(0, 0, w, h)
-    
-    def _create_placeholder_page(self, tab_id: str) -> QWidget:
-        colors = {"login": "mint", "pages": "purple", "reels": "pink", "content": "yellow", "groups": "coral", "scripts": "cyan", "posts": "mint"}
-        titles = {"login": "Login FB", "pages": "Pages", "reels": "Reels", "content": "Content", "groups": "Groups", "scripts": "Scripts", "posts": "Posts"}
-        
-        page = QWidget()
-        layout = QVBoxLayout(page)
-        layout.setContentsMargins(16, 12, 16, 12)
-        
-        title = CyberTitle(titles.get(tab_id, tab_id), "", colors.get(tab_id, "pink"))
-        layout.addWidget(title)
-        
-        placeholder_card = CyberCard(COLORS.get(f"neon_{colors.get(tab_id, 'pink')}", COLORS['neon_pink']))
-        placeholder_layout = QVBoxLayout(placeholder_card)
-        placeholder_layout.setContentsMargins(40, 60, 40, 60)
-        
-        placeholder = QLabel(f"🐱 {titles.get(tab_id, tab_id).upper()}\n\nĐang phát triển...")
-        placeholder.setStyleSheet(f"color: {COLORS['text_muted']}; font-size: 16px;")
-        placeholder.setAlignment(Qt.AlignCenter)
-        placeholder_layout.addWidget(placeholder)
-        
-        layout.addWidget(placeholder_card, 1)
-        
-        return page
     
     def _switch_tab(self, tab_id: str):
         for tid, nav in self.sidebar.nav_items.items():
