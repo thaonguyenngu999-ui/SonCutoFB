@@ -1,0 +1,11 @@
+# FB Manager Pro - PySide6 Edition
+# Python >= 3.9
+
+# UI Framework
+PySide6>=6.5.0
+
+# HTTP Requests
+requests>=2.31.0
+
+# WebSocket (for CDP)
+websocket-client>=1.6.0
