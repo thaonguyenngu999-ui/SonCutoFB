@@ -1,22 +1,20 @@
 """
 FB Manager Pro - Main Application
-🐱 CUTE CAT Edition - DATA FOCUSED 🐱
-Compact controls, BIG data display
+🐱 CUTE CAT Edition - SIMPLIFIED TABLE 🐱
 """
 
 import sys
 from PySide6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
-    QFrame, QLabel, QStackedWidget, QScrollArea, QSizePolicy,
-    QSpacerItem, QGridLayout, QTableWidgetItem
+    QFrame, QLabel, QStackedWidget, QTableWidgetItem
 )
 from PySide6.QtCore import Qt, QTimer
-from PySide6.QtGui import QFont, QColor, QPainter, QPen, QBrush, QLinearGradient, QPainterPath
+from PySide6.QtGui import QColor, QPainter, QPen, QBrush, QLinearGradient
 
 from config import COLORS, MENU_ITEMS, CYBERPUNK_QSS
 from widgets import (
     CyberButton, CyberInput, CyberComboBox, CyberCard, CyberStatCard,
-    CyberTitle, NavItem, CyberTerminal, CyberTable,
+    CyberTitle, NavItem, CyberTerminal, CyberTable, CyberCheckBox,
     ScanlineOverlay, NeonRain, CyberGrid, PulsingDot, GlitchText, NeonFlash
 )
 
@@ -26,19 +24,18 @@ class Sidebar(QWidget):
     
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setFixedWidth(200)  # SMALLER
+        self.setFixedWidth(200)
         
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
         
-        # Logo section
+        # Logo
         logo_section = QWidget()
-        logo_section.setFixedHeight(70)  # SMALLER
+        logo_section.setFixedHeight(70)
         logo_layout = QHBoxLayout(logo_section)
         logo_layout.setContentsMargins(14, 12, 14, 12)
         
-        # Logo
         logo_box = QFrame()
         logo_box.setFixedSize(40, 40)
         logo_box.setStyleSheet(f"""
@@ -53,7 +50,6 @@ class Sidebar(QWidget):
         logo_box_layout.addWidget(logo_text)
         logo_layout.addWidget(logo_box)
         
-        # Title
         title_widget = QWidget()
         title_layout = QVBoxLayout(title_widget)
         title_layout.setContentsMargins(10, 0, 0, 0)
@@ -74,10 +70,7 @@ class Sidebar(QWidget):
         # Divider
         divider = QFrame()
         divider.setFixedHeight(2)
-        divider.setStyleSheet(f"""
-            background: qlineargradient(x1:0, x2:1, stop:0 {COLORS['neon_pink']}, stop:1 {COLORS['neon_cyan']});
-            margin: 0 12px;
-        """)
+        divider.setStyleSheet(f"background: qlineargradient(x1:0, x2:1, stop:0 {COLORS['neon_pink']}, stop:1 {COLORS['neon_cyan']}); margin: 0 12px;")
         layout.addWidget(divider)
         
         # Navigation
@@ -95,7 +88,7 @@ class Sidebar(QWidget):
         layout.addWidget(nav_container)
         layout.addStretch()
         
-        # Connection status
+        # Connection
         conn_frame = QWidget()
         conn_frame.setFixedHeight(36)
         conn_layout = QHBoxLayout(conn_frame)
@@ -134,56 +127,51 @@ class Sidebar(QWidget):
 
 
 class ProfilesPage(QWidget):
-    """Profiles tab - DATA FOCUSED 🐱"""
+    """Profiles - SIMPLIFIED TABLE 🐱"""
     
     def __init__(self, log_func, parent=None):
         super().__init__(parent)
         self.log = log_func
         
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(16, 12, 16, 12)  # SMALLER margins
-        layout.setSpacing(10)  # SMALLER spacing
+        layout.setContentsMargins(16, 12, 16, 12)
+        layout.setSpacing(10)
         
-        # Top bar: Title + Stats inline
+        # Top bar
         top_bar = QHBoxLayout()
-        top_bar.setSpacing(16)
+        top_bar.setSpacing(12)
         
-        # Title compact
-        title = CyberTitle("Profiles", "Hidemium Browser", "pink")
+        title = CyberTitle("Profiles", "Hidemium", "pink")
         top_bar.addWidget(title)
         
         top_bar.addStretch()
         
-        # Stats inline - COMPACT
+        # Stats - wider
         self.stat_total = CyberStatCard("TOTAL", "0", "😺", "pink")
-        self.stat_total.setFixedWidth(140)
+        self.stat_total.setFixedWidth(160)
         top_bar.addWidget(self.stat_total)
         
         self.stat_running = CyberStatCard("RUNNING", "0", "🟢", "mint")
-        self.stat_running.setFixedWidth(140)
+        self.stat_running.setFixedWidth(160)
         top_bar.addWidget(self.stat_running)
         
         self.stat_folders = CyberStatCard("FOLDERS", "0", "📁", "purple")
-        self.stat_folders.setFixedWidth(140)
+        self.stat_folders.setFixedWidth(160)
         top_bar.addWidget(self.stat_folders)
         
         layout.addLayout(top_bar)
         
-        # Toolbar - COMPACT
+        # Toolbar
         toolbar = QHBoxLayout()
         toolbar.setSpacing(8)
         
         search = CyberInput("🔍 Tìm kiếm...")
-        search.setFixedWidth(220)
+        search.setFixedWidth(200)
         toolbar.addWidget(search)
         
-        folder_combo = CyberComboBox(["📁 Tất cả"])
-        folder_combo.setFixedWidth(130)
+        folder_combo = CyberComboBox(["📁 Tất cả", "📁 Marketing", "📁 Sales", "📁 Support"])
+        folder_combo.setFixedWidth(140)
         toolbar.addWidget(folder_combo)
-        
-        status_combo = CyberComboBox(["🔵 Tất cả", "🟢 Running", "⚪ Stopped"])
-        status_combo.setFixedWidth(130)
-        toolbar.addWidget(status_combo)
         
         toolbar.addStretch()
         
@@ -198,25 +186,30 @@ class ProfilesPage(QWidget):
         btn_start = CyberButton("START ALL", "success", "▶")
         toolbar.addWidget(btn_start)
         
-        btn_stop = CyberButton("STOP", "danger", "⏹")
+        btn_stop = CyberButton("STOP ALL", "danger", "⏹")
         toolbar.addWidget(btn_stop)
         
         layout.addLayout(toolbar)
         
-        # TABLE - BIG, takes most space
+        # Table card
         table_card = CyberCard(COLORS['neon_pink'])
         table_layout = QVBoxLayout(table_card)
         table_layout.setContentsMargins(2, 2, 2, 2)
         
-        # Table header
+        # Header
         header = QWidget()
-        header.setFixedHeight(36)
+        header.setFixedHeight(40)
         header.setStyleSheet(f"background: {COLORS['bg_darker']}; border-radius: 14px 14px 0 0;")
         header_layout = QHBoxLayout(header)
         header_layout.setContentsMargins(16, 0, 16, 0)
         
+        # Select all checkbox
+        self.select_all_cb = CyberCheckBox()
+        self.select_all_cb.stateChanged.connect(self._toggle_select_all)
+        header_layout.addWidget(self.select_all_cb)
+        
         header_title = QLabel("😺 PROFILES")
-        header_title.setStyleSheet(f"color: {COLORS['neon_pink']}; font-size: 11px; font-weight: bold; letter-spacing: 2px;")
+        header_title.setStyleSheet(f"color: {COLORS['neon_pink']}; font-size: 12px; font-weight: bold; letter-spacing: 2px;")
         header_layout.addWidget(header_title)
         
         self.count_label = QLabel("[0]")
@@ -225,29 +218,30 @@ class ProfilesPage(QWidget):
         
         header_layout.addStretch()
         
-        # Quick actions
-        btn_select_all = CyberButton("Select All", "ghost")
-        btn_select_all.setFixedHeight(26)
-        header_layout.addWidget(btn_select_all)
-        
         table_layout.addWidget(header)
         
-        # Table
-        self.table = CyberTable(["✓", "ID", "NAME", "STATUS", "PROXY", "FOLDER", "NOTES", "ACTIONS"])
-        self.table.setColumnWidth(0, 40)   # Checkbox
-        self.table.setColumnWidth(1, 80)   # ID
-        self.table.setColumnWidth(2, 180)  # Name
-        self.table.setColumnWidth(3, 100)  # Status
-        self.table.setColumnWidth(4, 150)  # Proxy
-        self.table.setColumnWidth(5, 100)  # Folder
-        self.table.setColumnWidth(6, 150)  # Notes
+        # Table - SIMPLIFIED: checkbox, ID, NAME, FOLDER, ACTIONS
+        self.table = CyberTable(["✓", "ID", "NAME", "FOLDER", "ACTIONS"])
+        self.table.setColumnWidth(0, 50)    # Checkbox
+        self.table.setColumnWidth(1, 100)   # ID
+        self.table.setColumnWidth(2, 300)   # Name - bigger
+        self.table.setColumnWidth(3, 150)   # Folder
+        # Actions will stretch
         
         table_layout.addWidget(self.table)
         
-        layout.addWidget(table_card, 1)  # Stretch factor 1 = take remaining space
+        layout.addWidget(table_card, 1)
         
-        # Load data
         QTimer.singleShot(300, self._load_sample_data)
+    
+    def _toggle_select_all(self, state):
+        """Toggle all checkboxes"""
+        for row in range(self.table.rowCount()):
+            widget = self.table.cellWidget(row, 0)
+            if widget:
+                cb = widget.findChild(CyberCheckBox)
+                if cb:
+                    cb.setChecked(state == Qt.Checked)
     
     def _load_sample_data(self):
         self.stat_total.set_value("247")
@@ -255,44 +249,40 @@ class ProfilesPage(QWidget):
         self.stat_folders.set_value("12")
         self.count_label.setText("[247 profiles]")
         
-        # Sample data
+        # Sample data - chỉ ID, NAME, FOLDER
         sample_data = [
-            ["", "PRF001", "Account_Marketing_01", "🟢 Running", "103.152.x.x:8080", "Marketing", "Main account"],
-            ["", "PRF002", "Account_Sales_02", "⚪ Stopped", "None", "Sales", ""],
-            ["", "PRF003", "Account_Support_03", "🟢 Running", "103.152.x.x:8081", "Support", "Customer care"],
-            ["", "PRF004", "Account_Dev_04", "🟡 Starting", "Auto", "Dev", "Testing"],
-            ["", "PRF005", "Account_Marketing_05", "🟢 Running", "103.152.x.x:8082", "Marketing", ""],
-            ["", "PRF006", "Account_HR_06", "⚪ Stopped", "None", "HR", "Recruitment"],
-            ["", "PRF007", "Account_Finance_07", "🟢 Running", "103.152.x.x:8083", "Finance", "Reports"],
-            ["", "PRF008", "Account_Marketing_08", "🟢 Running", "103.152.x.x:8084", "Marketing", "Ads"],
+            ["PRF001", "Account_Marketing_01", "Marketing"],
+            ["PRF002", "Account_Sales_02", "Sales"],
+            ["PRF003", "Account_Support_03", "Support"],
+            ["PRF004", "Account_Dev_04", "Dev"],
+            ["PRF005", "Account_Marketing_05", "Marketing"],
+            ["PRF006", "Account_HR_06", "HR"],
+            ["PRF007", "Account_Finance_07", "Finance"],
+            ["PRF008", "Account_Marketing_08", "Marketing"],
+            ["PRF009", "Account_Sales_09", "Sales"],
+            ["PRF010", "Account_Admin_10", "Admin"],
+            ["PRF011", "Account_Marketing_11", "Marketing"],
+            ["PRF012", "Account_Support_12", "Support"],
         ]
         
         self.table.setRowCount(len(sample_data))
         for row, data in enumerate(sample_data):
-            for col, value in enumerate(data):
-                item = QTableWidgetItem(value)
-                if col == 3:  # Status column
-                    if "Running" in value:
-                        item.setForeground(QColor(COLORS['neon_mint']))
-                    elif "Starting" in value:
-                        item.setForeground(QColor(COLORS['neon_yellow']))
-                self.table.setItem(row, col, item)
+            self.table.add_row_with_checkbox(data, row)
         
         self.log("Loaded 247 profiles", "success")
 
 
 class LogPanel(QWidget):
-    """Log panel COMPACT 🐱"""
+    """Log panel 🐱"""
     
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setFixedWidth(280)  # SMALLER
+        self.setFixedWidth(280)
         
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
         
-        # Header
         header = QWidget()
         header.setFixedHeight(40)
         header_layout = QHBoxLayout(header)
@@ -310,7 +300,6 @@ class LogPanel(QWidget):
         
         layout.addWidget(header)
         
-        # Terminal
         self.terminal = CyberTerminal()
         layout.addWidget(self.terminal)
     
@@ -333,16 +322,15 @@ class LogPanel(QWidget):
 
 
 class StatusBar(QWidget):
-    """Status bar COMPACT 🐱"""
+    """Status bar 🐱"""
     
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setFixedHeight(32)  # SMALLER
+        self.setFixedHeight(32)
         
         layout = QHBoxLayout(self)
         layout.setContentsMargins(16, 0, 16, 0)
         
-        # Left
         dot = PulsingDot(COLORS['neon_mint'])
         layout.addWidget(dot)
         
@@ -352,7 +340,6 @@ class StatusBar(QWidget):
         
         layout.addStretch()
         
-        # Right
         version = QLabel("🐱 CUTE CAT v2.0.77")
         version.setStyleSheet(f"color: {COLORS['text_muted']}; font-size: 10px;")
         layout.addWidget(version)
@@ -371,7 +358,7 @@ class StatusBar(QWidget):
 
 
 class MainWindow(QMainWindow):
-    """Main window DATA FOCUSED 🐱"""
+    """Main window 🐱"""
     
     def __init__(self):
         super().__init__()
@@ -387,30 +374,23 @@ class MainWindow(QMainWindow):
         main_layout.setContentsMargins(0, 0, 0, 0)
         main_layout.setSpacing(0)
         
-        # Content
         content = QWidget()
         content_layout = QHBoxLayout(content)
         content_layout.setContentsMargins(0, 0, 0, 0)
         content_layout.setSpacing(0)
         
-        # Sidebar
         self.sidebar = Sidebar()
         content_layout.addWidget(self.sidebar)
         
-        # Main area
         self.main_container = QWidget()
         self.main_container.setStyleSheet(f"background: {COLORS['bg_dark']};")
         main_container_layout = QVBoxLayout(self.main_container)
         main_container_layout.setContentsMargins(0, 0, 0, 0)
         main_container_layout.setSpacing(0)
         
-        # Pages
         self.pages = QStackedWidget()
-        
-        # Log panel
         self.log_panel = LogPanel()
         
-        # Create pages
         self.profiles_page = ProfilesPage(self.log)
         self.pages.addWidget(self.profiles_page)
         
@@ -425,20 +405,16 @@ class MainWindow(QMainWindow):
         
         main_layout.addWidget(content, 1)
         
-        # Status bar
         self.status_bar = StatusBar()
         main_layout.addWidget(self.status_bar)
         
-        # Effects
         self._setup_effects()
         
-        # Navigation
         for tab_id, nav_item in self.sidebar.nav_items.items():
             nav_item.clicked_nav.connect(self._switch_tab)
         
         self._switch_tab("profiles")
         
-        # Logs
         self.log("System ready", "success")
         self.log("Cute Cat Edition 🐱", "info")
         
