@@ -3,6 +3,14 @@ FB Manager Pro - Configuration
 🐱 CYBERPUNK CUTE CAT Edition 🐱
 """
 
+# ========== HIDEMIUM API CONFIG ==========
+HIDEMIUM_BASE_URL = "http://127.0.0.1:2222"
+HIDEMIUM_TOKEN = "Cu6tDTR2N1HhTxlMyrQubY2ad56eQzWOjVrrb"
+
+# ========== APP INFO ==========
+APP_NAME = "SonCuto FB Manager Pro"
+APP_VERSION = "2.0.77"
+
 # ========== COLORS - PASTEL NEON ==========
 COLORS = {
     # Background - softer dark
