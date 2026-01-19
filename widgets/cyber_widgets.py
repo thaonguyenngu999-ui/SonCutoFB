@@ -1,7 +1,6 @@
 """
 FB Manager Pro - Cyberpunk Widgets
-🐱 CUTE CAT Edition - DATA FOCUSED 🐱
-Compact controls, BIG data display
+🐱 CUTE CAT Edition - FIXED 🐱
 """
 
 from PySide6.QtWidgets import (
@@ -9,7 +8,7 @@ from PySide6.QtWidgets import (
     QLineEdit, QTextEdit, QComboBox, QScrollArea, QGraphicsDropShadowEffect,
     QTableWidget, QTableWidgetItem, QHeaderView, QCheckBox, QSizePolicy
 )
-from PySide6.QtCore import Qt, Signal, QTimer, QPropertyAnimation, QEasingCurve, QPoint
+from PySide6.QtCore import Qt, Signal, QTimer
 from PySide6.QtGui import QColor, QFont, QCursor, QPainter, QPen, QBrush, QLinearGradient, QPainterPath
 
 import sys
@@ -18,7 +17,7 @@ from config import COLORS
 
 
 class CyberButton(QPushButton):
-    """Button COMPACT cute 🐱"""
+    """Button COMPACT 🐱"""
     
     def __init__(self, text: str, variant: str = "primary", icon: str = None, parent=None):
         display_text = f"{icon} {text}" if icon else text
@@ -26,7 +25,7 @@ class CyberButton(QPushButton):
         
         self.variant = variant
         self.setCursor(QCursor(Qt.PointingHandCursor))
-        self.setFixedHeight(32)  # SMALLER
+        self.setFixedHeight(32)
         
         colors = {
             "primary": (COLORS["neon_pink"], COLORS["neon_purple"]),
@@ -41,7 +40,6 @@ class CyberButton(QPushButton):
         self.color1, self.color2 = colors.get(variant, colors["primary"])
         self._apply_style()
         
-        # Soft glow
         self.glow = QGraphicsDropShadowEffect(self)
         self.glow.setBlurRadius(0)
         self.glow.setColor(QColor(self.color1))
@@ -58,7 +56,6 @@ class CyberButton(QPushButton):
                 padding: 4px 14px;
                 font-weight: bold;
                 font-size: 11px;
-                letter-spacing: 1px;
             }}
             QPushButton:hover {{
                 background: qlineargradient(x1:0, x2:1, stop:0 {self.color1}, stop:1 {self.color2});
@@ -76,13 +73,44 @@ class CyberButton(QPushButton):
         super().leaveEvent(event)
 
 
+class CyberButtonSmall(QPushButton):
+    """Button nhỏ cho table actions 🐱"""
+    
+    def __init__(self, text: str, variant: str = "success", parent=None):
+        super().__init__(text, parent)
+        self.setCursor(QCursor(Qt.PointingHandCursor))
+        self.setFixedSize(60, 26)
+        
+        colors = {
+            "success": COLORS["neon_mint"],
+            "danger": COLORS["neon_coral"],
+            "primary": COLORS["neon_cyan"],
+        }
+        self.color = colors.get(variant, COLORS["neon_mint"])
+        
+        self.setStyleSheet(f"""
+            QPushButton {{
+                background: transparent;
+                border: 2px solid {self.color};
+                border-radius: 6px;
+                color: {self.color};
+                font-size: 10px;
+                font-weight: bold;
+            }}
+            QPushButton:hover {{
+                background: {self.color};
+                color: #0c0c18;
+            }}
+        """)
+
+
 class CyberInput(QLineEdit):
     """Input COMPACT 🐱"""
     
     def __init__(self, placeholder: str = "", parent=None):
         super().__init__(parent)
         self.setPlaceholderText(placeholder)
-        self.setFixedHeight(34)  # SMALLER
+        self.setFixedHeight(34)
         self.setStyleSheet(f"""
             QLineEdit {{
                 background: {COLORS['bg_card']};
@@ -108,7 +136,7 @@ class CyberComboBox(QComboBox):
         super().__init__(parent)
         if items:
             self.addItems(items)
-        self.setFixedHeight(34)  # SMALLER
+        self.setFixedHeight(34)
         
         self.setStyleSheet(f"""
             QComboBox {{
@@ -143,14 +171,13 @@ class CyberComboBox(QComboBox):
 
 
 class CyberCard(QWidget):
-    """Card cute rounded 🐱"""
+    """Card cute 🐱"""
     
     def __init__(self, glow_color: str = None, parent=None):
         super().__init__(parent)
         self.glow_color = QColor(glow_color) if glow_color else QColor(COLORS['neon_pink'])
         self.border_radius = 16
         
-        # Soft glow
         glow = QGraphicsDropShadowEffect(self)
         glow.setBlurRadius(20)
         glow.setColor(QColor(self.glow_color.red(), self.glow_color.green(), self.glow_color.blue(), 60))
@@ -178,11 +205,12 @@ class CyberCard(QWidget):
 
 
 class CyberStatCard(QWidget):
-    """Stat card COMPACT - inline style 🐱"""
+    """Stat card COMPACT - FIXED width 🐱"""
     
     def __init__(self, label: str, value: str, icon: str = "😺", color: str = "pink", parent=None):
         super().__init__(parent)
-        self.setFixedHeight(50)  # COMPACT
+        self.setFixedHeight(50)
+        self.setMinimumWidth(150)  # Đảm bảo đủ width
         
         color_map = {
             "pink": COLORS["neon_pink"],
@@ -195,31 +223,27 @@ class CyberStatCard(QWidget):
         self.neon_color = QColor(color_map.get(color, COLORS["neon_pink"]))
         self.border_radius = 12
         
-        # Layout
         layout = QHBoxLayout(self)
-        layout.setContentsMargins(14, 8, 14, 8)
-        layout.setSpacing(10)
+        layout.setContentsMargins(12, 8, 12, 8)
+        layout.setSpacing(8)
         
-        # Icon
         icon_lbl = QLabel(icon)
-        icon_lbl.setStyleSheet("font-size: 18px;")
+        icon_lbl.setStyleSheet("font-size: 16px;")
+        icon_lbl.setFixedWidth(20)
         layout.addWidget(icon_lbl)
         
-        # Value - BIG
         self.value_label = QLabel(value)
         self.value_label.setStyleSheet(f"""
             color: {self.neon_color.name()}; 
-            font-size: 22px; 
+            font-size: 20px; 
             font-weight: bold;
         """)
         layout.addWidget(self.value_label)
         
-        # Label - small
         lbl = QLabel(label)
         lbl.setStyleSheet(f"""
             color: {COLORS['text_muted']}; 
-            font-size: 10px; 
-            letter-spacing: 1px;
+            font-size: 10px;
         """)
         layout.addWidget(lbl)
         layout.addStretch()
@@ -240,11 +264,11 @@ class CyberStatCard(QWidget):
 
 
 class CyberTitle(QWidget):
-    """Title COMPACT với glitch 🐱"""
+    """Title COMPACT 🐱"""
     
     def __init__(self, title: str, subtitle: str = "", color: str = "pink", parent=None):
         super().__init__(parent)
-        self.setFixedHeight(50)  # COMPACT
+        self.setFixedHeight(50)
         
         color_map = {
             "pink": COLORS["neon_pink"],
@@ -258,18 +282,15 @@ class CyberTitle(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(12)
         
-        # Cat
         cat = QLabel("🐱")
         cat.setStyleSheet("font-size: 22px;")
         layout.addWidget(cat)
         
-        # Title
         from .cyber_effects import GlitchText
         title_label = GlitchText(title.upper(), neon_color, size=20)
         title_label.setFixedHeight(36)
         layout.addWidget(title_label)
         
-        # Subtitle
         if subtitle:
             sub = QLabel(f"// {subtitle}")
             sub.setStyleSheet(f"color: {COLORS['text_muted']}; font-size: 11px;")
@@ -279,7 +300,7 @@ class CyberTitle(QWidget):
 
 
 class NavItem(QPushButton):
-    """Navigation item COMPACT 🐱"""
+    """Navigation item 🐱"""
     
     clicked_nav = Signal(str)
     
@@ -300,7 +321,7 @@ class NavItem(QPushButton):
         self.neon_color = color_map.get(color, COLORS["neon_pink"])
         self.is_active = False
         
-        self.setFixedHeight(40)  # SMALLER
+        self.setFixedHeight(40)
         self.setCursor(QCursor(Qt.PointingHandCursor))
         self._apply_style()
         
@@ -344,6 +365,32 @@ class NavItem(QPushButton):
         self._apply_style()
 
 
+class CyberCheckBox(QCheckBox):
+    """Checkbox cute 🐱"""
+    
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setStyleSheet(f"""
+            QCheckBox {{
+                spacing: 0px;
+            }}
+            QCheckBox::indicator {{
+                width: 20px;
+                height: 20px;
+                border: 2px solid {COLORS['border']};
+                border-radius: 6px;
+                background: {COLORS['bg_darker']};
+            }}
+            QCheckBox::indicator:hover {{
+                border-color: {COLORS['neon_pink']};
+            }}
+            QCheckBox::indicator:checked {{
+                background: qlineargradient(x1:0, x2:1, stop:0 {COLORS['neon_pink']}, stop:1 {COLORS['neon_purple']});
+                border-color: {COLORS['neon_pink']};
+            }}
+        """)
+
+
 class CyberTerminal(QWidget):
     """Terminal COMPACT 🐱"""
     
@@ -363,7 +410,6 @@ class CyberTerminal(QWidget):
                 color: {COLORS['text_primary']};
                 font-family: 'Consolas', monospace;
                 font-size: 11px;
-                line-height: 1.4;
             }}
         """)
         layout.addWidget(self.text_area)
@@ -412,7 +458,7 @@ class CyberTerminal(QWidget):
 
 
 class CyberTable(QTableWidget):
-    """Table BIG DATA display 🐱"""
+    """Table với checkbox và action buttons 🐱"""
     
     def __init__(self, columns: list, parent=None):
         super().__init__(parent)
@@ -428,12 +474,12 @@ class CyberTable(QTableWidget):
                 font-size: 13px;
             }}
             QTableWidget::item {{
-                padding: 10px 8px;
+                padding: 8px;
                 border-bottom: 1px solid {COLORS['border']};
                 color: {COLORS['text_primary']};
             }}
             QTableWidget::item:selected {{
-                background: rgba(255, 107, 157, 0.2);
+                background: rgba(255, 107, 157, 0.15);
             }}
             QTableWidget::item:hover {{
                 background: {COLORS['bg_hover']};
@@ -441,11 +487,11 @@ class CyberTable(QTableWidget):
             QHeaderView::section {{
                 background: {COLORS['bg_darker']};
                 color: {COLORS['neon_cyan']};
-                padding: 8px;
+                padding: 10px 8px;
                 border: none;
                 border-bottom: 2px solid {COLORS['neon_cyan']};
                 font-weight: bold;
-                font-size: 10px;
+                font-size: 11px;
                 letter-spacing: 1px;
             }}
         """)
@@ -453,10 +499,41 @@ class CyberTable(QTableWidget):
         header = self.horizontalHeader()
         header.setStretchLastSection(True)
         header.setSectionResizeMode(QHeaderView.Interactive)
-        header.setMinimumSectionSize(60)
+        header.setMinimumSectionSize(50)
         
         self.verticalHeader().setVisible(False)
-        self.verticalHeader().setDefaultSectionSize(42)  # Row height
+        self.verticalHeader().setDefaultSectionSize(45)
         self.setShowGrid(False)
         self.setSelectionBehavior(QTableWidget.SelectRows)
-        self.setAlternatingRowColors(True)
+    
+    def add_row_with_checkbox(self, data: list, row: int):
+        """Add row với checkbox ở đầu và buttons ở cuối"""
+        # Checkbox
+        checkbox_widget = QWidget()
+        checkbox_layout = QHBoxLayout(checkbox_widget)
+        checkbox_layout.setContentsMargins(0, 0, 0, 0)
+        checkbox_layout.setAlignment(Qt.AlignCenter)
+        checkbox = CyberCheckBox()
+        checkbox_layout.addWidget(checkbox)
+        self.setCellWidget(row, 0, checkbox_widget)
+        
+        # Data columns
+        for col, value in enumerate(data):
+            item = QTableWidgetItem(str(value))
+            item.setTextAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+            self.setItem(row, col + 1, item)
+        
+        # Action buttons
+        action_widget = QWidget()
+        action_layout = QHBoxLayout(action_widget)
+        action_layout.setContentsMargins(4, 4, 4, 4)
+        action_layout.setSpacing(6)
+        
+        btn_start = CyberButtonSmall("▶ Start", "success")
+        btn_stop = CyberButtonSmall("⏹ Stop", "danger")
+        
+        action_layout.addWidget(btn_start)
+        action_layout.addWidget(btn_stop)
+        action_layout.addStretch()
+        
+        self.setCellWidget(row, self.columnCount() - 1, action_widget)
