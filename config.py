@@ -1,43 +1,50 @@
 """
 FB Manager Pro - Configuration
-Cyberpunk 2077 Theme - V3 BIGGER & BOLDER
+🐱 CYBERPUNK CUTE CAT Edition 🐱
 """
 
-# ========== COLORS ==========
+# ========== COLORS - PASTEL NEON ==========
 COLORS = {
-    # Background
-    "bg_dark": "#0a0a18",
-    "bg_darker": "#06060f",
-    "bg_card": "#0f0f22",
-    "bg_hover": "#1a1a35",
+    # Background - softer dark
+    "bg_dark": "#12121f",
+    "bg_darker": "#0c0c18",
+    "bg_card": "#1a1a2e",
+    "bg_hover": "#252545",
     
-    # Neon colors
-    "neon_cyan": "#00f0ff",
-    "neon_magenta": "#ff00a8",
-    "neon_yellow": "#fcee0a",
-    "neon_green": "#00ff66",
-    "neon_purple": "#bf00ff",
-    "neon_orange": "#ff6b00",
-    "neon_red": "#ff003c",
+    # Pastel Neon - cute colors
+    "neon_pink": "#ff6b9d",
+    "neon_cyan": "#6bfff2",
+    "neon_purple": "#b88fff",
+    "neon_mint": "#6bffb8",
+    "neon_yellow": "#fff06b",
+    "neon_coral": "#ff8f6b",
+    "neon_blue": "#6bb8ff",
+    "neon_rose": "#ff6bda",
     
-    # Text - BIGGER
+    # Legacy names
+    "neon_magenta": "#ff6bda",
+    "neon_green": "#6bffb8",
+    "neon_orange": "#ff8f6b",
+    "neon_red": "#ff6b6b",
+    
+    # Text
     "text_primary": "#ffffff",
-    "text_secondary": "#c0c0d8",
-    "text_muted": "#7878a0",
-    "border": "#2a2a50",
-    "border_bright": "#4040a0",
+    "text_secondary": "#c8c8e0",
+    "text_muted": "#8888b0",
+    "border": "#3a3a60",
+    "border_bright": "#5050a0",
 }
 
-# ========== MENU ==========
+# ========== MENU - với cat emoji ==========
 MENU_ITEMS = [
-    {"id": "profiles", "icon": "👤", "text": "Profiles", "color": "cyan"},
-    {"id": "login", "icon": "🔐", "text": "Login FB", "color": "green"},
+    {"id": "profiles", "icon": "😺", "text": "Profiles", "color": "cyan"},
+    {"id": "login", "icon": "🔐", "text": "Login FB", "color": "mint"},
     {"id": "pages", "icon": "📄", "text": "Pages", "color": "purple"},
-    {"id": "reels", "icon": "🎬", "text": "Reels", "color": "magenta"},
+    {"id": "reels", "icon": "🎬", "text": "Reels", "color": "pink"},
     {"id": "content", "icon": "✏️", "text": "Soạn tin", "color": "yellow"},
-    {"id": "groups", "icon": "👥", "text": "Đăng nhóm", "color": "orange"},
-    {"id": "scripts", "icon": "📜", "text": "Kịch bản", "color": "cyan"},
-    {"id": "posts", "icon": "📊", "text": "Bài đăng", "color": "green"},
+    {"id": "groups", "icon": "😸", "text": "Đăng nhóm", "color": "coral"},
+    {"id": "scripts", "icon": "🐱", "text": "Kịch bản", "color": "blue"},
+    {"id": "posts", "icon": "📊", "text": "Bài đăng", "color": "mint"},
 ]
 
 # ========== API ==========
@@ -46,15 +53,15 @@ API_CONFIG = {
     "timeout": 30,
 }
 
-# ========== QSS STYLESHEET ==========
+# ========== QSS STYLESHEET - CUTE ==========
 CYBERPUNK_QSS = """
-/* ========== GLOBAL - BIGGER FONTS ========== */
+/* ========== GLOBAL - ROUNDED & CUTE ========== */
 * {
     font-family: 'Segoe UI', 'Arial', sans-serif;
 }
 
 QMainWindow, QWidget {
-    background-color: #06060f;
+    background-color: #0c0c18;
     color: #ffffff;
     font-size: 14px;
 }
@@ -63,21 +70,23 @@ QLabel {
     font-size: 14px;
 }
 
-/* ========== SCROLLBAR ========== */
+/* ========== SCROLLBAR - CUTE ROUNDED ========== */
 QScrollBar:vertical {
-    background: #0a0a18;
-    width: 10px;
-    border-radius: 5px;
+    background: #1a1a2e;
+    width: 12px;
+    border-radius: 6px;
+    margin: 4px;
 }
 
 QScrollBar::handle:vertical {
-    background: #2a2a50;
+    background: qlineargradient(x1:0, x2:1, stop:0 #ff6b9d, stop:1 #b88fff);
     border-radius: 5px;
-    min-height: 30px;
+    min-height: 40px;
+    margin: 2px;
 }
 
 QScrollBar::handle:vertical:hover {
-    background: #00f0ff;
+    background: qlineargradient(x1:0, x2:1, stop:0 #ff8fb8, stop:1 #c8a8ff);
 }
 
 QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
@@ -85,63 +94,63 @@ QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
 }
 
 QScrollBar:horizontal {
-    background: #0a0a18;
-    height: 10px;
-    border-radius: 5px;
+    background: #1a1a2e;
+    height: 12px;
+    border-radius: 6px;
+    margin: 4px;
 }
 
 QScrollBar::handle:horizontal {
-    background: #2a2a50;
+    background: qlineargradient(y1:0, y2:1, stop:0 #6bfff2, stop:1 #6bb8ff);
     border-radius: 5px;
-    min-width: 30px;
+    min-width: 40px;
+    margin: 2px;
 }
 
-QScrollBar::handle:horizontal:hover {
-    background: #00f0ff;
-}
-
-/* ========== BUTTONS ========== */
+/* ========== BUTTONS - ROUNDED ========== */
 QPushButton {
     background: transparent;
-    border: 2px solid #00f0ff;
-    color: #00f0ff;
+    border: 2px solid #ff6b9d;
+    border-radius: 12px;
+    color: #ff6b9d;
     padding: 12px 24px;
     font-weight: bold;
     font-size: 13px;
-    letter-spacing: 1px;
 }
 
 QPushButton:hover {
-    background: #00f0ff;
-    color: #06060f;
+    background: #ff6b9d;
+    color: #0c0c18;
 }
 
-/* ========== INPUT ========== */
+/* ========== INPUT - ROUNDED ========== */
 QLineEdit, QTextEdit {
-    background: #0a0a18;
-    border: 2px solid #2a2a50;
-    padding: 12px 16px;
+    background: #1a1a2e;
+    border: 2px solid #3a3a60;
+    border-radius: 12px;
+    padding: 12px 18px;
     color: #ffffff;
     font-size: 14px;
-    selection-background-color: #00f0ff;
+    selection-background-color: #ff6b9d;
 }
 
 QLineEdit:focus, QTextEdit:focus {
-    border-color: #00f0ff;
+    border-color: #6bfff2;
 }
 
 /* ========== COMBOBOX ========== */
 QComboBox {
-    background: #0a0a18;
-    border: 2px solid #2a2a50;
-    padding: 12px 16px;
+    background: #1a1a2e;
+    border: 2px solid #3a3a60;
+    border-radius: 12px;
+    padding: 12px 18px;
     color: #ffffff;
     font-size: 14px;
     min-width: 160px;
 }
 
 QComboBox:hover {
-    border-color: #00f0ff;
+    border-color: #b88fff;
 }
 
 QComboBox::drop-down {
@@ -152,13 +161,14 @@ QComboBox::drop-down {
 QComboBox::down-arrow {
     border-left: 6px solid transparent;
     border-right: 6px solid transparent;
-    border-top: 8px solid #00f0ff;
+    border-top: 8px solid #b88fff;
 }
 
 QComboBox QAbstractItemView {
-    background: #0f0f22;
-    border: 2px solid #2a2a50;
-    selection-background-color: #1a1a35;
+    background: #1a1a2e;
+    border: 2px solid #3a3a60;
+    border-radius: 8px;
+    selection-background-color: #252545;
     font-size: 14px;
 }
 
@@ -166,30 +176,32 @@ QComboBox QAbstractItemView {
 QTableWidget {
     background: transparent;
     border: none;
-    gridline-color: #2a2a50;
+    gridline-color: #3a3a60;
     font-size: 14px;
+    border-radius: 12px;
 }
 
 QTableWidget::item {
     padding: 14px;
-    border-bottom: 1px solid #2a2a50;
+    border-bottom: 1px solid #3a3a60;
     color: #ffffff;
 }
 
 QTableWidget::item:selected {
-    background: rgba(0, 240, 255, 0.2);
+    background: rgba(255, 107, 157, 0.2);
 }
 
 QTableWidget::item:hover {
-    background: #1a1a35;
+    background: #252545;
 }
 
 QHeaderView::section {
-    background: #0a0a18;
-    color: #00f0ff;
+    background: #1a1a2e;
+    color: #6bfff2;
     padding: 14px;
     border: none;
-    border-bottom: 3px solid #00f0ff;
+    border-bottom: 3px solid #6bfff2;
+    border-radius: 0;
     font-weight: bold;
     font-size: 12px;
     letter-spacing: 2px;
@@ -205,16 +217,17 @@ QCheckBox {
 QCheckBox::indicator {
     width: 22px;
     height: 22px;
-    border: 2px solid #2a2a50;
-    background: #0a0a18;
+    border: 2px solid #3a3a60;
+    border-radius: 6px;
+    background: #1a1a2e;
 }
 
 QCheckBox::indicator:checked {
-    background: #00f0ff;
-    border-color: #00f0ff;
+    background: qlineargradient(x1:0, x2:1, stop:0 #ff6b9d, stop:1 #b88fff);
+    border-color: #ff6b9d;
 }
 
 QCheckBox::indicator:hover {
-    border-color: #00f0ff;
+    border-color: #ff6b9d;
 }
 """
