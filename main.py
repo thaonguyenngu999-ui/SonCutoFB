@@ -1,6 +1,6 @@
 """
 FB Manager Pro - Main Application
-🐱 CUTE CAT Edition - SIMPLIFIED TABLE 🐱
+🐱 CUTE CAT Edition - BEAUTIFUL 🐱
 """
 
 import sys
@@ -67,13 +67,11 @@ class Sidebar(QWidget):
         logo_layout.addStretch()
         layout.addWidget(logo_section)
         
-        # Divider
         divider = QFrame()
         divider.setFixedHeight(2)
         divider.setStyleSheet(f"background: qlineargradient(x1:0, x2:1, stop:0 {COLORS['neon_pink']}, stop:1 {COLORS['neon_cyan']}); margin: 0 12px;")
         layout.addWidget(divider)
         
-        # Navigation
         self.nav_items = {}
         nav_container = QWidget()
         nav_layout = QVBoxLayout(nav_container)
@@ -88,7 +86,6 @@ class Sidebar(QWidget):
         layout.addWidget(nav_container)
         layout.addStretch()
         
-        # Connection
         conn_frame = QWidget()
         conn_frame.setFixedHeight(36)
         conn_layout = QHBoxLayout(conn_frame)
@@ -127,7 +124,7 @@ class Sidebar(QWidget):
 
 
 class ProfilesPage(QWidget):
-    """Profiles - SIMPLIFIED TABLE 🐱"""
+    """Profiles - BEAUTIFUL TABLE 🐱"""
     
     def __init__(self, log_func, parent=None):
         super().__init__(parent)
@@ -146,7 +143,6 @@ class ProfilesPage(QWidget):
         
         top_bar.addStretch()
         
-        # Stats - wider
         self.stat_total = CyberStatCard("TOTAL", "0", "😺", "pink")
         self.stat_total.setFixedWidth(160)
         top_bar.addWidget(self.stat_total)
@@ -183,12 +179,6 @@ class ProfilesPage(QWidget):
         btn_sync.clicked.connect(lambda: self.log("Syncing...", "info"))
         toolbar.addWidget(btn_sync)
         
-        btn_start = CyberButton("START ALL", "success", "▶")
-        toolbar.addWidget(btn_start)
-        
-        btn_stop = CyberButton("STOP ALL", "danger", "⏹")
-        toolbar.addWidget(btn_stop)
-        
         layout.addLayout(toolbar)
         
         # Table card
@@ -196,17 +186,38 @@ class ProfilesPage(QWidget):
         table_layout = QVBoxLayout(table_card)
         table_layout.setContentsMargins(2, 2, 2, 2)
         
-        # Header
+        # Header với Select All
         header = QWidget()
-        header.setFixedHeight(40)
+        header.setFixedHeight(44)
         header.setStyleSheet(f"background: {COLORS['bg_darker']}; border-radius: 14px 14px 0 0;")
         header_layout = QHBoxLayout(header)
         header_layout.setContentsMargins(16, 0, 16, 0)
+        header_layout.setSpacing(12)
         
-        # Select all checkbox
+        # Select All checkbox với label
+        select_all_widget = QWidget()
+        select_all_layout = QHBoxLayout(select_all_widget)
+        select_all_layout.setContentsMargins(0, 0, 0, 0)
+        select_all_layout.setSpacing(8)
+        
         self.select_all_cb = CyberCheckBox()
         self.select_all_cb.stateChanged.connect(self._toggle_select_all)
-        header_layout.addWidget(self.select_all_cb)
+        select_all_layout.addWidget(self.select_all_cb)
+        
+        select_all_label = QLabel("Chọn tất cả")
+        select_all_label.setStyleSheet(f"color: {COLORS['text_secondary']}; font-size: 12px;")
+        select_all_label.setCursor(Qt.PointingHandCursor)
+        select_all_label.mousePressEvent = lambda e: self.select_all_cb.setChecked(not self.select_all_cb.isChecked())
+        select_all_layout.addWidget(select_all_label)
+        
+        header_layout.addWidget(select_all_widget)
+        
+        # Separator
+        sep = QFrame()
+        sep.setFixedWidth(2)
+        sep.setFixedHeight(24)
+        sep.setStyleSheet(f"background: {COLORS['border']};")
+        header_layout.addWidget(sep)
         
         header_title = QLabel("😺 PROFILES")
         header_title.setStyleSheet(f"color: {COLORS['neon_pink']}; font-size: 12px; font-weight: bold; letter-spacing: 2px;")
@@ -218,15 +229,19 @@ class ProfilesPage(QWidget):
         
         header_layout.addStretch()
         
+        # Selected count
+        self.selected_label = QLabel("")
+        self.selected_label.setStyleSheet(f"color: {COLORS['neon_cyan']}; font-size: 11px;")
+        header_layout.addWidget(self.selected_label)
+        
         table_layout.addWidget(header)
         
-        # Table - SIMPLIFIED: checkbox, ID, NAME, FOLDER, ACTIONS
-        self.table = CyberTable(["✓", "ID", "NAME", "FOLDER", "ACTIONS"])
-        self.table.setColumnWidth(0, 50)    # Checkbox
-        self.table.setColumnWidth(1, 100)   # ID
-        self.table.setColumnWidth(2, 300)   # Name - bigger
-        self.table.setColumnWidth(3, 150)   # Folder
-        # Actions will stretch
+        # Table - checkbox, ID, NAME, FOLDER, ACTION (toggle)
+        self.table = CyberTable(["✓", "ID", "NAME", "FOLDER", "ACTION"])
+        self.table.setColumnWidth(0, 50)
+        self.table.setColumnWidth(1, 100)
+        self.table.setColumnWidth(2, 350)
+        self.table.setColumnWidth(3, 150)
         
         table_layout.addWidget(self.table)
         
@@ -235,13 +250,21 @@ class ProfilesPage(QWidget):
         QTimer.singleShot(300, self._load_sample_data)
     
     def _toggle_select_all(self, state):
-        """Toggle all checkboxes"""
+        checked = state == Qt.Checked
+        count = 0
         for row in range(self.table.rowCount()):
             widget = self.table.cellWidget(row, 0)
             if widget:
                 cb = widget.findChild(CyberCheckBox)
                 if cb:
-                    cb.setChecked(state == Qt.Checked)
+                    cb.setChecked(checked)
+                    if checked:
+                        count += 1
+        
+        if checked:
+            self.selected_label.setText(f"✓ {count} đã chọn")
+        else:
+            self.selected_label.setText("")
     
     def _load_sample_data(self):
         self.stat_total.set_value("247")
@@ -249,7 +272,6 @@ class ProfilesPage(QWidget):
         self.stat_folders.set_value("12")
         self.count_label.setText("[247 profiles]")
         
-        # Sample data - chỉ ID, NAME, FOLDER
         sample_data = [
             ["PRF001", "Account_Marketing_01", "Marketing"],
             ["PRF002", "Account_Sales_02", "Sales"],
@@ -267,7 +289,7 @@ class ProfilesPage(QWidget):
         
         self.table.setRowCount(len(sample_data))
         for row, data in enumerate(sample_data):
-            self.table.add_row_with_checkbox(data, row)
+            self.table.add_row_with_widgets(data, row)
         
         self.log("Loaded 247 profiles", "success")
 
