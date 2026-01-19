@@ -82,7 +82,8 @@ class ToggleButton(QPushButton):
         super().__init__(parent)
         self.is_running = False
         self.setCursor(QCursor(Qt.PointingHandCursor))
-        self.setFixedSize(70, 28)
+        self.setFixedSize(80, 30)
+        self.setFont(QFont("Segoe UI", 10, QFont.Bold))
         self._update_style()
         self.clicked.connect(self._toggle)
     
@@ -98,10 +99,11 @@ class ToggleButton(QPushButton):
                 QPushButton {{
                     background: {COLORS['neon_coral']};
                     border: none;
-                    border-radius: 8px;
+                    border-radius: 6px;
                     color: #0c0c18;
                     font-size: 11px;
                     font-weight: bold;
+                    padding: 0px;
                 }}
                 QPushButton:hover {{
                     background: {COLORS['neon_pink']};
@@ -113,10 +115,11 @@ class ToggleButton(QPushButton):
                 QPushButton {{
                     background: {COLORS['neon_mint']};
                     border: none;
-                    border-radius: 8px;
+                    border-radius: 6px;
                     color: #0c0c18;
                     font-size: 11px;
                     font-weight: bold;
+                    padding: 0px;
                 }}
                 QPushButton:hover {{
                     background: {COLORS['neon_cyan']};
@@ -521,8 +524,9 @@ class CyberTable(QTableWidget):
         """)
         
         header = self.horizontalHeader()
-        header.setStretchLastSection(True)
+        header.setStretchLastSection(False)
         header.setSectionResizeMode(QHeaderView.Interactive)
+        header.setSectionResizeMode(2, QHeaderView.Stretch)  # NAME column stretches
         header.setMinimumSectionSize(50)
         
         self.verticalHeader().setVisible(False)
@@ -531,9 +535,10 @@ class CyberTable(QTableWidget):
         self.setSelectionBehavior(QTableWidget.SelectRows)
     
     def add_row_with_widgets(self, data: list, row: int):
-        """Add row với checkbox và toggle button"""
-        # Checkbox
+        """Add row với checkbox và toggle button - CENTERED"""
+        # Checkbox - centered
         checkbox_widget = QWidget()
+        checkbox_widget.setStyleSheet("background: transparent;")
         checkbox_layout = QHBoxLayout(checkbox_widget)
         checkbox_layout.setContentsMargins(0, 0, 0, 0)
         checkbox_layout.setAlignment(Qt.AlignCenter)
@@ -547,10 +552,11 @@ class CyberTable(QTableWidget):
             item.setTextAlignment(Qt.AlignLeft | Qt.AlignVCenter)
             self.setItem(row, col + 1, item)
         
-        # Toggle button
+        # Toggle button - centered
         action_widget = QWidget()
+        action_widget.setStyleSheet("background: transparent;")
         action_layout = QHBoxLayout(action_widget)
-        action_layout.setContentsMargins(8, 8, 8, 8)
+        action_layout.setContentsMargins(0, 0, 0, 0)
         action_layout.setAlignment(Qt.AlignCenter)
         
         toggle_btn = ToggleButton()
