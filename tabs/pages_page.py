@@ -1,12 +1,12 @@
 """
 Pages Page - Quan ly cac Fanpage Facebook
-PySide6 version with Hidemium integration
+PySide6 version - BEAUTIFUL UI like ProfilesPage
 """
 import threading
 from typing import List, Dict
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QFrame,
-    QScrollArea, QCheckBox, QMessageBox, QProgressBar
+    QMessageBox, QTableWidgetItem, QProgressBar
 )
 from PySide6.QtCore import Qt, QTimer
 
@@ -18,12 +18,12 @@ from widgets import (
 from api_service import api
 from db import (
     get_profiles, get_pages, get_pages_for_profiles, save_page,
-    delete_page, delete_pages_bulk, sync_pages, clear_pages
+    delete_page, delete_pages_bulk, sync_pages, clear_pages, get_pages_count
 )
 
 
 class PagesPage(QWidget):
-    """Pages Page - Quan ly Fanpage"""
+    """Pages Page - Quan ly Fanpage - BEAUTIFUL UI"""
 
     def __init__(self, log_func, parent=None):
         super().__init__(parent)
@@ -31,11 +31,10 @@ class PagesPage(QWidget):
         self.profiles: List[Dict] = []
         self.pages: List[Dict] = []
         self.folders: List[Dict] = []
+        self.folder_map: Dict[str, str] = {}
 
-        # Selection
-        self.selected_profile_uuids: List[str] = []
-        self.profile_checkboxes: Dict[str, QCheckBox] = {}
-        self.page_checkboxes: Dict[int, QCheckBox] = {}
+        # Selection tracking
+        self.page_checkboxes: Dict[int, CyberCheckBox] = {}
 
         # State
         self._is_scanning = False
@@ -48,226 +47,202 @@ class PagesPage(QWidget):
         layout.setContentsMargins(16, 12, 16, 12)
         layout.setSpacing(10)
 
-        # Top bar
+        # ========== TOP BAR ==========
         top_bar = QHBoxLayout()
-        title = CyberTitle("Pages", "Quan ly Fanpage", "purple")
+        top_bar.setSpacing(12)
+
+        title = CyberTitle("Pages", "Quan ly Fanpage Facebook", "purple")
         top_bar.addWidget(title)
+
         top_bar.addStretch()
 
-        self.stat_profiles = CyberStatCard("PROFILES", "0", "📁", "purple")
-        self.stat_profiles.setFixedWidth(140)
-        top_bar.addWidget(self.stat_profiles)
-
-        self.stat_pages = CyberStatCard("PAGES", "0", "📄", "pink")
-        self.stat_pages.setFixedWidth(140)
-        top_bar.addWidget(self.stat_pages)
+        self.stat_total = CyberStatCard("TONG PAGE", "0", "📄", "purple")
+        self.stat_total.setFixedWidth(160)
+        top_bar.addWidget(self.stat_total)
 
         self.stat_selected = CyberStatCard("DA CHON", "0", "✓", "cyan")
-        self.stat_selected.setFixedWidth(140)
+        self.stat_selected.setFixedWidth(160)
         top_bar.addWidget(self.stat_selected)
+
+        self.stat_profiles = CyberStatCard("PROFILES", "0", "📁", "pink")
+        self.stat_profiles.setFixedWidth(160)
+        top_bar.addWidget(self.stat_profiles)
 
         layout.addLayout(top_bar)
 
-        # Main content - 2 columns
-        content = QHBoxLayout()
-        content.setSpacing(12)
-
-        # Left panel - Profile selection
-        left_card = CyberCard(COLORS['neon_purple'])
-        left_card.setFixedWidth(280)
-        left_layout = QVBoxLayout(left_card)
-        left_layout.setContentsMargins(12, 12, 12, 12)
-
-        # Header
-        header_row = QHBoxLayout()
-        header_label = QLabel("Chon Profile")
-        header_label.setStyleSheet(f"color: {COLORS['text_primary']}; font-size: 14px; font-weight: bold;")
-        header_row.addWidget(header_label)
-
-        btn_refresh = CyberButton("", "ghost", "🔄")
-        btn_refresh.setFixedWidth(36)
-        btn_refresh.clicked.connect(self._load_data)
-        header_row.addWidget(btn_refresh)
-
-        left_layout.addLayout(header_row)
+        # ========== TOOLBAR ==========
+        toolbar = QHBoxLayout()
+        toolbar.setSpacing(8)
 
         # Folder filter
-        folder_row = QHBoxLayout()
-        folder_label = QLabel("📁")
-        folder_label.setStyleSheet(f"color: {COLORS['text_secondary']}; font-size: 12px;")
-        folder_row.addWidget(folder_label)
-
-        self.folder_combo = CyberComboBox(["-- Tat ca --"])
+        self.folder_combo = CyberComboBox(["📁 Tat ca folder"])
+        self.folder_combo.setFixedWidth(180)
         self.folder_combo.currentIndexChanged.connect(self._on_folder_change)
-        folder_row.addWidget(self.folder_combo, 1)
+        toolbar.addWidget(self.folder_combo)
 
-        left_layout.addLayout(folder_row)
+        # Profile filter
+        self.profile_combo = CyberComboBox(["👤 Tat ca profile"])
+        self.profile_combo.setFixedWidth(200)
+        self.profile_combo.currentIndexChanged.connect(self._on_profile_change)
+        toolbar.addWidget(self.profile_combo)
 
-        # Select buttons
-        btn_row = QHBoxLayout()
-        btn_all = CyberButton("Chon tat ca", "ghost")
-        btn_all.clicked.connect(self._select_all_profiles)
-        btn_row.addWidget(btn_all)
-
-        btn_none = CyberButton("Bo chon", "ghost")
-        btn_none.clicked.connect(self._deselect_all_profiles)
-        btn_row.addWidget(btn_none)
-
-        left_layout.addLayout(btn_row)
-
-        # Profile list
-        scroll = QScrollArea()
-        scroll.setWidgetResizable(True)
-        scroll.setStyleSheet(f"""
-            QScrollArea {{
-                background: {COLORS['bg_darker']};
-                border: 1px solid {COLORS['border']};
-                border-radius: 8px;
-            }}
-        """)
-
-        self.profile_list_widget = QWidget()
-        self.profile_list_layout = QVBoxLayout(self.profile_list_widget)
-        self.profile_list_layout.setContentsMargins(8, 8, 8, 8)
-        self.profile_list_layout.setSpacing(4)
-        self.profile_list_layout.addStretch()
-
-        scroll.setWidget(self.profile_list_widget)
-        left_layout.addWidget(scroll, 1)
-
-        # Stats
-        self.profile_stats = QLabel("Profiles: 0 | Da chon: 0")
-        self.profile_stats.setStyleSheet(f"color: {COLORS['text_muted']}; font-size: 10px;")
-        left_layout.addWidget(self.profile_stats)
-
-        content.addWidget(left_card)
-
-        # Right panel - Pages list
-        right_card = CyberCard(COLORS['neon_pink'])
-        right_layout = QVBoxLayout(right_card)
-        right_layout.setContentsMargins(12, 12, 12, 12)
-
-        # Header with actions
-        header_row2 = QHBoxLayout()
-        pages_label = QLabel("Danh sach Page")
-        pages_label.setStyleSheet(f"color: {COLORS['text_primary']}; font-size: 14px; font-weight: bold;")
-        header_row2.addWidget(pages_label)
-        header_row2.addStretch()
-
-        btn_scan = CyberButton("Scan Page", "primary", "🔍")
-        btn_scan.clicked.connect(self._scan_pages)
-        header_row2.addWidget(btn_scan)
-
-        btn_delete = CyberButton("Xoa", "danger", "🗑️")
-        btn_delete.clicked.connect(self._delete_selected_pages)
-        header_row2.addWidget(btn_delete)
-
-        right_layout.addLayout(header_row2)
-
-        # Search and filter
-        filter_row = QHBoxLayout()
-
+        # Search
         self.search_input = CyberInput("🔍 Tim kiem Page...")
-        self.search_input.setFixedWidth(250)
+        self.search_input.setFixedWidth(200)
         self.search_input.textChanged.connect(self._filter_pages)
-        filter_row.addWidget(self.search_input)
+        toolbar.addWidget(self.search_input)
 
-        filter_row.addStretch()
+        toolbar.addStretch()
 
-        self.select_all_pages_cb = CyberCheckBox()
-        self.select_all_pages_cb.stateChanged.connect(self._toggle_all_pages)
-        filter_row.addWidget(self.select_all_pages_cb)
+        # Action buttons
+        btn_refresh = CyberButton("", "ghost", "🔄")
+        btn_refresh.setFixedWidth(40)
+        btn_refresh.clicked.connect(self._load_data)
+        toolbar.addWidget(btn_refresh)
 
-        select_label = QLabel("Chon tat ca")
-        select_label.setStyleSheet(f"color: {COLORS['text_secondary']}; font-size: 11px;")
-        filter_row.addWidget(select_label)
+        btn_scan = CyberButton("SCAN", "cyan", "🔍")
+        btn_scan.clicked.connect(self._scan_pages)
+        toolbar.addWidget(btn_scan)
 
-        right_layout.addLayout(filter_row)
+        btn_delete = CyberButton("XOA", "danger", "🗑️")
+        btn_delete.clicked.connect(self._delete_selected_pages)
+        toolbar.addWidget(btn_delete)
 
-        # Progress
+        layout.addLayout(toolbar)
+
+        # ========== PROGRESS BAR ==========
         self.progress_bar = QProgressBar()
+        self.progress_bar.setFixedHeight(6)
         self.progress_bar.setStyleSheet(f"""
             QProgressBar {{
                 background: {COLORS['bg_darker']};
-                border: 1px solid {COLORS['border']};
-                border-radius: 4px;
-                height: 12px;
+                border: none;
+                border-radius: 3px;
             }}
             QProgressBar::chunk {{
-                background: {COLORS['neon_pink']};
+                background: qlineargradient(x1:0, x2:1, stop:0 {COLORS['neon_purple']}, stop:1 {COLORS['neon_pink']});
                 border-radius: 3px;
             }}
         """)
         self.progress_bar.setValue(0)
-        right_layout.addWidget(self.progress_bar)
+        self.progress_bar.setVisible(False)
+        layout.addWidget(self.progress_bar)
 
-        # Table header
-        table_header = QFrame()
-        table_header.setFixedHeight(32)
-        table_header.setStyleSheet(f"background: {COLORS['bg_card']}; border-radius: 4px;")
-        table_header_layout = QHBoxLayout(table_header)
-        table_header_layout.setContentsMargins(8, 0, 8, 0)
+        # ========== MAIN CONTENT - TABLE CARD ==========
+        table_card = CyberCard(COLORS['neon_purple'])
+        table_layout = QVBoxLayout(table_card)
+        table_layout.setContentsMargins(2, 2, 2, 2)
 
-        headers = [("", 30), ("Ten Page", 200), ("Followers", 80), ("Profile", 150), ("Role", 60)]
-        for text, width in headers:
-            lbl = QLabel(text)
-            lbl.setFixedWidth(width)
-            lbl.setStyleSheet(f"color: {COLORS['text_muted']}; font-size: 10px; font-weight: bold;")
-            table_header_layout.addWidget(lbl)
+        # Header
+        header = QWidget()
+        header.setFixedHeight(44)
+        header.setStyleSheet(f"background: {COLORS['bg_darker']}; border-radius: 14px 14px 0 0;")
+        header_layout = QHBoxLayout(header)
+        header_layout.setContentsMargins(16, 0, 16, 0)
+        header_layout.setSpacing(12)
 
-        table_header_layout.addStretch()
-        right_layout.addWidget(table_header)
+        # Select All
+        select_widget = QWidget()
+        select_layout = QHBoxLayout(select_widget)
+        select_layout.setContentsMargins(0, 0, 0, 0)
+        select_layout.setSpacing(8)
 
-        # Pages list
-        scroll2 = QScrollArea()
-        scroll2.setWidgetResizable(True)
-        scroll2.setStyleSheet(f"""
-            QScrollArea {{
-                background: {COLORS['bg_darker']};
-                border: 1px solid {COLORS['border']};
-                border-radius: 8px;
-            }}
-        """)
+        self.select_all_cb = CyberCheckBox()
+        self.select_all_cb.stateChanged.connect(self._toggle_select_all)
+        select_layout.addWidget(self.select_all_cb)
 
-        self.pages_list_widget = QWidget()
-        self.pages_list_layout = QVBoxLayout(self.pages_list_widget)
-        self.pages_list_layout.setContentsMargins(8, 8, 8, 8)
-        self.pages_list_layout.setSpacing(2)
+        select_label = QLabel("Chon tat ca")
+        select_label.setStyleSheet(f"color: {COLORS['text_secondary']}; font-size: 12px;")
+        select_label.setCursor(Qt.PointingHandCursor)
+        select_label.mousePressEvent = lambda e: self.select_all_cb.setChecked(not self.select_all_cb.isChecked())
+        select_layout.addWidget(select_label)
 
-        empty_label = QLabel("Chua co Page nao\nChon profile va bam 'Scan Page' de quet")
-        empty_label.setStyleSheet(f"color: {COLORS['text_muted']}; font-size: 12px;")
-        empty_label.setAlignment(Qt.AlignCenter)
-        self.pages_list_layout.addWidget(empty_label)
-        self.pages_list_layout.addStretch()
+        header_layout.addWidget(select_widget)
 
-        scroll2.setWidget(self.pages_list_widget)
-        right_layout.addWidget(scroll2, 1)
+        # Separator
+        sep = QFrame()
+        sep.setFixedWidth(2)
+        sep.setFixedHeight(24)
+        sep.setStyleSheet(f"background: {COLORS['border']};")
+        header_layout.addWidget(sep)
 
-        content.addWidget(right_card, 1)
-        layout.addLayout(content, 1)
+        # Title
+        header_title = QLabel("📄 FANPAGES")
+        header_title.setStyleSheet(f"color: {COLORS['neon_purple']}; font-size: 12px; font-weight: bold; letter-spacing: 2px;")
+        header_layout.addWidget(header_title)
+
+        self.count_label = QLabel("[0]")
+        self.count_label.setStyleSheet(f"color: {COLORS['text_muted']}; font-size: 11px;")
+        header_layout.addWidget(self.count_label)
+
+        header_layout.addStretch()
+
+        # Selected count
+        self.selected_label = QLabel("")
+        self.selected_label.setStyleSheet(f"color: {COLORS['neon_cyan']}; font-size: 11px;")
+        header_layout.addWidget(self.selected_label)
+
+        # Progress text
+        self.progress_label = QLabel("")
+        self.progress_label.setStyleSheet(f"color: {COLORS['neon_pink']}; font-size: 11px;")
+        header_layout.addWidget(self.progress_label)
+
+        table_layout.addWidget(header)
+
+        # Table
+        self.table = CyberTable(["✓", "TEN PAGE", "FOLLOWERS", "PROFILE", "ROLE", "CATEGORY"])
+        self.table.setColumnWidth(0, 50)
+        self.table.setColumnWidth(1, 250)
+        self.table.setColumnWidth(2, 100)
+        self.table.setColumnWidth(3, 150)
+        self.table.setColumnWidth(4, 80)
+        self.table.setColumnWidth(5, 120)
+
+        table_layout.addWidget(self.table)
+        layout.addWidget(table_card, 1)
 
     def _load_data(self):
-        """Load profiles va folders"""
+        """Load folders, profiles va pages tu Hidemium va DB"""
+        self.log("Loading data...", "info")
+
         def fetch():
             try:
-                profiles = get_profiles()
                 folders = api.get_folders(limit=100)
-                return {"profiles": profiles, "folders": folders or []}
+                profiles = api.get_profiles(limit=500)
+                pages = get_pages()
+                return {"folders": folders or [], "profiles": profiles or [], "pages": pages or []}
             except Exception as e:
-                return {"profiles": get_profiles(), "folders": []}
+                return {"folders": [], "profiles": get_profiles(), "pages": get_pages(), "error": str(e)}
 
-        def on_complete(data):
-            self.profiles = data.get("profiles", [])
-            self.folders = data.get("folders", [])
+        def on_complete(result):
+            if "error" in result:
+                self.log(f"API Error: {result['error']}", "warning")
+
+            self.folders = result.get("folders", [])
+            self.profiles = result.get("profiles", [])
+            self.pages = result.get("pages", [])
+
+            # Build folder map
+            self.folder_map = {f.get('id'): f.get('name', 'Unknown') for f in self.folders}
 
             # Update folder combo
             self.folder_combo.clear()
-            self.folder_combo.addItem("-- Tat ca --")
-            for f in self.folders:
-                self.folder_combo.addItem(f"📁 {f.get('name', 'Unknown')}")
+            self.folder_combo.addItem("📁 Tat ca folder")
+            for folder in self.folders:
+                self.folder_combo.addItem(f"📁 {folder.get('name', 'Unknown')}")
 
-            self._render_profiles()
-            self.log(f"Loaded {len(self.profiles)} profiles", "success")
+            # Update profile combo
+            self.profile_combo.clear()
+            self.profile_combo.addItem("👤 Tat ca profile")
+            for profile in self.profiles:
+                name = profile.get('name', 'Unknown')
+                if len(name) > 25:
+                    name = name[:25] + "..."
+                self.profile_combo.addItem(f"👤 {name}")
+
+            self._update_table()
+            self._update_stats()
+            self.log(f"Loaded {len(self.profiles)} profiles, {len(self.pages)} pages", "success")
 
         def run():
             result = fetch()
@@ -275,211 +250,230 @@ class PagesPage(QWidget):
 
         threading.Thread(target=run, daemon=True).start()
 
-    def _render_profiles(self):
-        """Render danh sach profiles"""
-        while self.profile_list_layout.count() > 0:
-            item = self.profile_list_layout.takeAt(0)
-            if item.widget():
-                item.widget().deleteLater()
-
-        self.profile_checkboxes.clear()
-
-        if not self.profiles:
-            label = QLabel("Khong co profile")
-            label.setStyleSheet(f"color: {COLORS['text_muted']}; font-size: 11px;")
-            label.setAlignment(Qt.AlignCenter)
-            self.profile_list_layout.addWidget(label)
-            self.profile_list_layout.addStretch()
-            return
-
-        for profile in self.profiles:
-            uuid = profile.get('uuid', '')
-            name = profile.get('name', 'Unknown')
-
-            row = QWidget()
-            row.setStyleSheet(f"background: {COLORS['bg_card']}; border-radius: 4px;")
-            row.setFixedHeight(36)
-            row_layout = QHBoxLayout(row)
-            row_layout.setContentsMargins(8, 4, 8, 4)
-            row_layout.setSpacing(8)
-
-            cb = CyberCheckBox()
-            cb.setChecked(uuid in self.selected_profile_uuids)
-            cb.stateChanged.connect(lambda state, u=uuid: self._on_profile_select(u, state))
-            self.profile_checkboxes[uuid] = cb
-            row_layout.addWidget(cb)
-
-            name_label = QLabel(name[:20] + "..." if len(name) > 20 else name)
-            name_label.setStyleSheet(f"color: {COLORS['text_primary']}; font-size: 11px;")
-            row_layout.addWidget(name_label, 1)
-
-            self.profile_list_layout.addWidget(row)
-
-        self.profile_list_layout.addStretch()
-        self._update_profile_stats()
-
     def _on_folder_change(self, index):
-        """Khi thay doi folder"""
+        """Khi thay doi folder filter"""
         if index <= 0:
-            self.profiles = get_profiles()
+            # All folders - load all profiles
+            self._load_profiles_for_folder(None)
         else:
             folder = self.folders[index - 1]
             folder_id = folder.get('id')
+            self._load_profiles_for_folder(folder_id)
+
+    def _load_profiles_for_folder(self, folder_id):
+        """Load profiles theo folder"""
+        def fetch():
             try:
-                self.profiles = api.get_profiles(folder_id=[folder_id]) or []
+                if folder_id:
+                    return api.get_profiles(folder_id=[folder_id], limit=500)
+                else:
+                    return api.get_profiles(limit=500)
             except:
-                self.profiles = get_profiles()
+                return get_profiles()
 
-        self._render_profiles()
+        def on_complete(profiles):
+            self.profiles = profiles or []
 
-    def _on_profile_select(self, uuid: str, state):
-        """Khi chon/bo chon profile"""
-        if state == Qt.Checked:
-            if uuid not in self.selected_profile_uuids:
-                self.selected_profile_uuids.append(uuid)
+            # Update profile combo
+            self.profile_combo.clear()
+            self.profile_combo.addItem("👤 Tat ca profile")
+            for profile in self.profiles:
+                name = profile.get('name', 'Unknown')
+                if len(name) > 25:
+                    name = name[:25] + "..."
+                self.profile_combo.addItem(f"👤 {name}")
+
+            self._filter_pages_by_profile()
+            self._update_stats()
+
+        def run():
+            result = fetch()
+            QTimer.singleShot(0, lambda: on_complete(result))
+
+        threading.Thread(target=run, daemon=True).start()
+
+    def _on_profile_change(self, index):
+        """Khi thay doi profile filter"""
+        self._filter_pages_by_profile()
+
+    def _filter_pages_by_profile(self):
+        """Filter pages theo profile da chon"""
+        profile_idx = self.profile_combo.currentIndex()
+
+        if profile_idx <= 0:
+            # All profiles - get pages for all current profiles
+            profile_uuids = [p.get('uuid') for p in self.profiles]
+            if profile_uuids:
+                self.pages = get_pages_for_profiles(profile_uuids)
+            else:
+                self.pages = get_pages()
         else:
-            if uuid in self.selected_profile_uuids:
-                self.selected_profile_uuids.remove(uuid)
+            profile = self.profiles[profile_idx - 1]
+            uuid = profile.get('uuid', '')
+            self.pages = get_pages(uuid)
 
-        self._update_profile_stats()
-        self._load_pages_for_selected()
+        self._update_table()
+        self._update_stats()
 
-    def _select_all_profiles(self):
-        for uuid, cb in self.profile_checkboxes.items():
-            cb.setChecked(True)
+    def _filter_pages(self, search_text):
+        """Filter pages theo search text"""
+        self._update_table(search_text)
 
-    def _deselect_all_profiles(self):
-        for uuid, cb in self.profile_checkboxes.items():
-            cb.setChecked(False)
-
-    def _update_profile_stats(self):
-        total = len(self.profile_checkboxes)
-        selected = len(self.selected_profile_uuids)
-        self.profile_stats.setText(f"Profiles: {total} | Da chon: {selected}")
-        self.stat_profiles.set_value(str(total))
-        self.stat_selected.set_value(str(selected))
-
-    def _load_pages_for_selected(self):
-        """Load pages cho cac profiles da chon"""
-        if not self.selected_profile_uuids:
-            self.pages = []
-            self._render_pages()
-            return
-
-        self.pages = get_pages_for_profiles(self.selected_profile_uuids)
-        self._render_pages()
-
-    def _render_pages(self, search_text=None):
-        """Render danh sach pages"""
-        while self.pages_list_layout.count() > 0:
-            item = self.pages_list_layout.takeAt(0)
-            if item.widget():
-                item.widget().deleteLater()
-
-        self.page_checkboxes.clear()
-
+    def _update_table(self, search_text=None):
+        """Update table voi pages"""
         # Filter by search
         pages_to_show = self.pages
         if search_text:
             search_lower = search_text.lower()
-            pages_to_show = [p for p in self.pages if search_lower in p.get('page_name', '').lower()]
+            pages_to_show = [
+                p for p in self.pages
+                if search_lower in p.get('page_name', '').lower()
+                or search_lower in p.get('category', '').lower()
+            ]
 
-        if not pages_to_show:
-            label = QLabel("Chua co Page nao\nChon profile va bam 'Scan Page'")
-            label.setStyleSheet(f"color: {COLORS['text_muted']}; font-size: 12px;")
-            label.setAlignment(Qt.AlignCenter)
-            self.pages_list_layout.addWidget(label)
-            self.pages_list_layout.addStretch()
-            self.stat_pages.set_value("0")
-            return
+        # Build profile name map
+        profile_map = {p.get('uuid'): p.get('name', 'Unknown') for p in self.profiles}
 
-        # Profile name map
-        profile_map = {p['uuid']: p.get('name', 'Unknown') for p in self.profiles}
+        self.table.setRowCount(len(pages_to_show))
+        self.page_checkboxes.clear()
 
-        for page in pages_to_show:
+        for row, page in enumerate(pages_to_show):
             page_id = page.get('id')
             page_name = page.get('page_name', 'Unknown')
             followers = page.get('follower_count', 0)
             profile_uuid = page.get('profile_uuid', '')
-            profile_name = profile_map.get(profile_uuid, 'Unknown')[:15]
+            profile_name = profile_map.get(profile_uuid, 'Unknown')
             role = page.get('role', 'admin')
+            category = page.get('category', '-')
 
-            row = QWidget()
-            row.setStyleSheet(f"background: {COLORS['bg_card']}; border-radius: 4px;")
-            row.setFixedHeight(36)
-            row_layout = QHBoxLayout(row)
-            row_layout.setContentsMargins(8, 4, 8, 4)
-            row_layout.setSpacing(4)
+            # Checkbox
+            cb_widget = QWidget()
+            cb_widget.setStyleSheet("background: transparent;")
+            cb_layout = QHBoxLayout(cb_widget)
+            cb_layout.setContentsMargins(0, 0, 0, 0)
+            cb_layout.setAlignment(Qt.AlignCenter)
+            checkbox = CyberCheckBox()
+            checkbox.stateChanged.connect(self._update_selection_count)
+            cb_layout.addWidget(checkbox)
+            self.table.setCellWidget(row, 0, cb_widget)
+            self.page_checkboxes[page_id] = checkbox
 
-            cb = CyberCheckBox()
-            cb.stateChanged.connect(self._update_page_selection_count)
-            self.page_checkboxes[page_id] = cb
-            row_layout.addWidget(cb)
+            # Page name
+            name_item = QTableWidgetItem(page_name[:35] + "..." if len(page_name) > 35 else page_name)
+            self.table.setItem(row, 1, name_item)
 
-            name_lbl = QLabel(page_name[:25] + "..." if len(page_name) > 25 else page_name)
-            name_lbl.setFixedWidth(200)
-            name_lbl.setStyleSheet(f"color: {COLORS['text_primary']}; font-size: 11px;")
-            row_layout.addWidget(name_lbl)
+            # Followers
+            followers_item = QTableWidgetItem(self._format_number(followers))
+            followers_item.setTextAlignment(Qt.AlignCenter)
+            self.table.setItem(row, 2, followers_item)
 
-            followers_lbl = QLabel(str(followers))
-            followers_lbl.setFixedWidth(80)
-            followers_lbl.setStyleSheet(f"color: {COLORS['neon_cyan']}; font-size: 11px;")
-            row_layout.addWidget(followers_lbl)
+            # Profile name
+            profile_display = profile_name[:20] + "..." if len(profile_name) > 20 else profile_name
+            self.table.setItem(row, 3, QTableWidgetItem(profile_display))
 
-            profile_lbl = QLabel(profile_name)
-            profile_lbl.setFixedWidth(150)
-            profile_lbl.setStyleSheet(f"color: {COLORS['text_muted']}; font-size: 10px;")
-            row_layout.addWidget(profile_lbl)
+            # Role
+            role_item = QTableWidgetItem(role)
+            role_item.setTextAlignment(Qt.AlignCenter)
+            self.table.setItem(row, 4, role_item)
 
-            role_lbl = QLabel(role)
-            role_lbl.setFixedWidth(60)
-            role_lbl.setStyleSheet(f"color: {COLORS['neon_purple']}; font-size: 10px;")
-            row_layout.addWidget(role_lbl)
+            # Category
+            self.table.setItem(row, 5, QTableWidgetItem(category or '-'))
 
-            row_layout.addStretch()
-            self.pages_list_layout.addWidget(row)
+        self.count_label.setText(f"[{len(pages_to_show)} pages]")
 
-        self.pages_list_layout.addStretch()
-        self.stat_pages.set_value(str(len(pages_to_show)))
+    def _format_number(self, num):
+        """Format so de hien thi"""
+        if num >= 1000000:
+            return f"{num/1000000:.1f}M"
+        elif num >= 1000:
+            return f"{num/1000:.1f}K"
+        return str(num)
 
-    def _filter_pages(self, text):
-        self._render_pages(text)
-
-    def _toggle_all_pages(self, state):
+    def _toggle_select_all(self, state):
+        """Toggle chon tat ca pages"""
         checked = state == Qt.Checked
-        for cb in self.page_checkboxes.values():
+        count = 0
+        for page_id, cb in self.page_checkboxes.items():
             cb.setChecked(checked)
+            if checked:
+                count += 1
+        self.selected_label.setText(f"✓ {count} da chon" if checked else "")
+        self._update_stats()
 
-    def _update_page_selection_count(self):
+    def _update_selection_count(self):
+        """Cap nhat so luong da chon"""
         count = sum(1 for cb in self.page_checkboxes.values() if cb.isChecked())
+        self.selected_label.setText(f"✓ {count} da chon" if count > 0 else "")
         self.stat_selected.set_value(str(count))
 
+    def _update_stats(self):
+        """Cap nhat stats"""
+        self.stat_total.set_value(str(len(self.pages)))
+        selected = sum(1 for cb in self.page_checkboxes.values() if cb.isChecked())
+        self.stat_selected.set_value(str(selected))
+        self.stat_profiles.set_value(str(len(self.profiles)))
+
     def _scan_pages(self):
-        """Scan pages tu profiles da chon"""
-        if not self.selected_profile_uuids:
-            QMessageBox.warning(self, "Loi", "Chua chon profile nao!")
+        """Scan pages tu profiles"""
+        if self._is_scanning:
+            QMessageBox.warning(self, "Thong bao", "Dang scan, vui long doi...")
+            return
+
+        # Get selected profile or all profiles
+        profile_idx = self.profile_combo.currentIndex()
+        if profile_idx <= 0:
+            profiles_to_scan = self.profiles
+        else:
+            profiles_to_scan = [self.profiles[profile_idx - 1]]
+
+        if not profiles_to_scan:
+            QMessageBox.warning(self, "Loi", "Khong co profile nao de scan!")
+            return
+
+        reply = QMessageBox.question(
+            self, "Xac nhan",
+            f"Scan pages tu {len(profiles_to_scan)} profiles?\n\nLuu y: Tinh nang nay can mo browser va dang nhap Facebook.",
+            QMessageBox.Yes | QMessageBox.No
+        )
+
+        if reply != QMessageBox.Yes:
             return
 
         self._is_scanning = True
-        self.progress_bar.setMaximum(len(self.selected_profile_uuids))
-        self.log("Bat dau scan pages...", "info")
+        self.progress_bar.setVisible(True)
+        self.progress_bar.setMaximum(len(profiles_to_scan))
+        self.progress_bar.setValue(0)
+        self.log(f"Bat dau scan {len(profiles_to_scan)} profiles...", "info")
 
         def do_scan():
             total_pages = 0
-            for i, uuid in enumerate(self.selected_profile_uuids):
-                QTimer.singleShot(0, lambda v=i+1: self.progress_bar.setValue(v))
+            for i, profile in enumerate(profiles_to_scan):
+                uuid = profile.get('uuid', '')
+                name = profile.get('name', uuid[:8])
 
-                # TODO: Implement actual page scanning via CDP
-                # For now, just log
-                name = next((p.get('name', '') for p in self.profiles if p.get('uuid') == uuid), uuid[:8])
+                QTimer.singleShot(0, lambda v=i+1: self.progress_bar.setValue(v))
+                QTimer.singleShot(0, lambda m=f"[{i+1}/{len(profiles_to_scan)}] {name}": self.progress_label.setText(m))
                 QTimer.singleShot(0, lambda m=f"Scanning {name}...": self.log(m, "info"))
 
+                # TODO: Implement actual page scanning via CDP
+                # This would involve:
+                # 1. Open browser with api.open_browser(uuid)
+                # 2. Navigate to facebook.com/pages
+                # 3. Extract page info using CDP
+                # 4. Save to database with sync_pages(uuid, pages_data)
+
+                # Simulate scan delay
                 import time
                 time.sleep(1)
 
+                # For demo, create mock pages
+                # In real implementation, this would be actual scanned data
+
             self._is_scanning = False
-            QTimer.singleShot(0, lambda: self.log(f"Scan hoan thanh!", "success"))
-            QTimer.singleShot(0, self._load_pages_for_selected)
+            QTimer.singleShot(0, lambda: self.progress_bar.setVisible(False))
+            QTimer.singleShot(0, lambda: self.progress_label.setText(""))
+            QTimer.singleShot(0, lambda: self.log("Scan hoan thanh!", "success"))
+            QTimer.singleShot(0, self._filter_pages_by_profile)
 
         threading.Thread(target=do_scan, daemon=True).start()
 
@@ -500,4 +494,4 @@ class PagesPage(QWidget):
         if reply == QMessageBox.Yes:
             deleted = delete_pages_bulk(selected_ids)
             self.log(f"Da xoa {deleted} pages", "success")
-            self._load_pages_for_selected()
+            self._filter_pages_by_profile()

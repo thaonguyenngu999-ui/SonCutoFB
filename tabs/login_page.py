@@ -1,21 +1,20 @@
 """
 Login Page - Dang nhap Facebook cho cac profiles
-PySide6 version with Hidemium integration
+PySide6 version - BEAUTIFUL UI like ProfilesPage
 """
 import threading
 import os
-from typing import List, Dict, Optional
+from typing import List, Dict
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QFrame,
-    QScrollArea, QCheckBox, QFileDialog, QProgressBar, QTextEdit,
-    QRadioButton, QButtonGroup, QSpinBox, QMessageBox
+    QFileDialog, QMessageBox, QTableWidgetItem, QSpinBox
 )
-from PySide6.QtCore import Qt, QTimer, Signal, QObject
+from PySide6.QtCore import Qt, QTimer
 
 from config import COLORS
 from widgets import (
     CyberButton, CyberInput, CyberComboBox, CyberCard,
-    CyberTitle, CyberStatCard, CyberTable, CyberCheckBox
+    CyberTitle, CyberStatCard, CyberTable, CyberCheckBox, ToggleButton
 )
 from api_service import api
 from db import get_profiles, sync_profiles
@@ -30,7 +29,7 @@ except ImportError:
 
 
 class LoginPage(QWidget):
-    """Login Page - Dang nhap Facebook"""
+    """Login Page - Dang nhap Facebook - BEAUTIFUL UI"""
 
     def __init__(self, log_func, parent=None):
         super().__init__(parent)
@@ -43,7 +42,7 @@ class LoginPage(QWidget):
 
         # Profile status
         self.profile_status: Dict[str, Dict] = {}
-        self.profile_checkboxes: Dict[str, QCheckBox] = {}
+        self.profile_checkboxes: Dict[str, CyberCheckBox] = {}
 
         # Running state
         self._is_running = False
@@ -57,332 +56,269 @@ class LoginPage(QWidget):
         layout.setContentsMargins(16, 12, 16, 12)
         layout.setSpacing(10)
 
-        # Top bar
+        # ========== TOP BAR ==========
         top_bar = QHBoxLayout()
-        title = CyberTitle("Login FB", "Dang nhap Facebook", "mint")
+        top_bar.setSpacing(12)
+
+        title = CyberTitle("Login FB", "Dang nhap Facebook tu dong", "mint")
         top_bar.addWidget(title)
+
         top_bar.addStretch()
 
-        self.stat_total = CyberStatCard("PROFILES", "0", "📁", "mint")
-        self.stat_total.setFixedWidth(140)
-        top_bar.addWidget(self.stat_total)
+        self.stat_profiles = CyberStatCard("PROFILES", "0", "📁", "mint")
+        self.stat_profiles.setFixedWidth(160)
+        top_bar.addWidget(self.stat_profiles)
 
         self.stat_selected = CyberStatCard("DA CHON", "0", "✓", "cyan")
-        self.stat_selected.setFixedWidth(140)
+        self.stat_selected.setFixedWidth(160)
         top_bar.addWidget(self.stat_selected)
 
         self.stat_accounts = CyberStatCard("TAI KHOAN", "0", "👤", "purple")
-        self.stat_accounts.setFixedWidth(140)
+        self.stat_accounts.setFixedWidth(160)
         top_bar.addWidget(self.stat_accounts)
 
         layout.addLayout(top_bar)
 
-        # Main content - 2 columns
+        # ========== TOOLBAR ==========
+        toolbar = QHBoxLayout()
+        toolbar.setSpacing(8)
+
+        # Folder selection
+        self.folder_combo = CyberComboBox(["📁 Chon folder"])
+        self.folder_combo.setFixedWidth(180)
+        self.folder_combo.currentIndexChanged.connect(self._on_folder_change)
+        toolbar.addWidget(self.folder_combo)
+
+        btn_load = CyberButton("TAI", "cyan", "📥")
+        btn_load.clicked.connect(self._load_profiles)
+        toolbar.addWidget(btn_load)
+
+        toolbar.addStretch()
+
+        # Import XLSX
+        self.xlsx_input = CyberInput("📂 Chon file XLSX...")
+        self.xlsx_input.setFixedWidth(200)
+        self.xlsx_input.setReadOnly(True)
+        toolbar.addWidget(self.xlsx_input)
+
+        btn_browse = CyberButton("CHON FILE", "purple", "📂")
+        btn_browse.clicked.connect(self._browse_xlsx)
+        toolbar.addWidget(btn_browse)
+
+        toolbar.addStretch()
+
+        btn_refresh = CyberButton("⟳", "ghost")
+        btn_refresh.setFixedWidth(40)
+        btn_refresh.clicked.connect(self._load_folders)
+        toolbar.addWidget(btn_refresh)
+
+        layout.addLayout(toolbar)
+
+        # ========== MAIN CONTENT ==========
         content = QHBoxLayout()
         content.setSpacing(12)
 
-        # Left panel - Profile selection
-        left_card = CyberCard(COLORS['neon_mint'])
-        left_card.setFixedWidth(350)
-        left_layout = QVBoxLayout(left_card)
-        left_layout.setContentsMargins(12, 12, 12, 12)
+        # LEFT - Profiles Table
+        profiles_card = CyberCard(COLORS['neon_mint'])
+        profiles_layout = QVBoxLayout(profiles_card)
+        profiles_layout.setContentsMargins(2, 2, 2, 2)
 
-        # Folder selection
-        folder_row = QHBoxLayout()
-        folder_label = QLabel("Thu muc:")
-        folder_label.setStyleSheet(f"color: {COLORS['text_secondary']}; font-size: 12px;")
-        folder_row.addWidget(folder_label)
+        # Header
+        header = QWidget()
+        header.setFixedHeight(44)
+        header.setStyleSheet(f"background: {COLORS['bg_darker']}; border-radius: 14px 14px 0 0;")
+        header_layout = QHBoxLayout(header)
+        header_layout.setContentsMargins(16, 0, 16, 0)
+        header_layout.setSpacing(12)
 
-        self.folder_combo = CyberComboBox(["-- Chon --"])
-        self.folder_combo.setFixedWidth(180)
-        self.folder_combo.currentIndexChanged.connect(self._on_folder_change)
-        folder_row.addWidget(self.folder_combo)
+        # Select All
+        select_widget = QWidget()
+        select_layout = QHBoxLayout(select_widget)
+        select_layout.setContentsMargins(0, 0, 0, 0)
+        select_layout.setSpacing(8)
 
-        btn_load = CyberButton("Tai", "cyan")
-        btn_load.setFixedWidth(60)
-        btn_load.clicked.connect(self._load_profiles)
-        folder_row.addWidget(btn_load)
-
-        left_layout.addLayout(folder_row)
-
-        # Check FB controls
-        check_row = QHBoxLayout()
-        check_label = QLabel("Luong:")
-        check_label.setStyleSheet(f"color: {COLORS['text_secondary']}; font-size: 12px;")
-        check_row.addWidget(check_label)
-
-        self.check_threads = QSpinBox()
-        self.check_threads.setRange(1, 10)
-        self.check_threads.setValue(3)
-        self.check_threads.setFixedWidth(60)
-        self.check_threads.setStyleSheet(f"""
-            QSpinBox {{
-                background: {COLORS['bg_darker']};
-                color: {COLORS['text_primary']};
-                border: 1px solid {COLORS['border']};
-                border-radius: 4px;
-                padding: 4px;
-            }}
-        """)
-        check_row.addWidget(self.check_threads)
-
-        btn_check = CyberButton("Check FB", "primary", "🔍")
-        btn_check.clicked.connect(self._check_fb_status)
-        check_row.addWidget(btn_check)
-        check_row.addStretch()
-
-        left_layout.addLayout(check_row)
-
-        # Filter
-        filter_row = QHBoxLayout()
-        self.filter_group = QButtonGroup(self)
-
-        filters = [("Tat ca", "all"), ("Chua co FB", "no_fb"), ("Co FB", "has_fb")]
-        for text, value in filters:
-            radio = QRadioButton(text)
-            radio.setStyleSheet(f"color: {COLORS['text_secondary']}; font-size: 11px;")
-            radio.setProperty("filter_value", value)
-            radio.toggled.connect(self._apply_filter)
-            self.filter_group.addButton(radio)
-            filter_row.addWidget(radio)
-            if value == "all":
-                radio.setChecked(True)
-
-        filter_row.addStretch()
-        left_layout.addLayout(filter_row)
-
-        # Select all
-        select_row = QHBoxLayout()
         self.select_all_cb = CyberCheckBox()
-        self.select_all_cb.stateChanged.connect(self._toggle_all)
-        select_row.addWidget(self.select_all_cb)
+        self.select_all_cb.stateChanged.connect(self._toggle_select_all)
+        select_layout.addWidget(self.select_all_cb)
 
         select_label = QLabel("Chon tat ca")
         select_label.setStyleSheet(f"color: {COLORS['text_secondary']}; font-size: 12px;")
-        select_row.addWidget(select_label)
+        select_label.setCursor(Qt.PointingHandCursor)
+        select_label.mousePressEvent = lambda e: self.select_all_cb.setChecked(not self.select_all_cb.isChecked())
+        select_layout.addWidget(select_label)
 
-        self.count_label = QLabel("(0 da chon)")
-        self.count_label.setStyleSheet(f"color: {COLORS['neon_cyan']}; font-size: 11px;")
-        select_row.addWidget(self.count_label)
-        select_row.addStretch()
+        header_layout.addWidget(select_widget)
 
-        left_layout.addLayout(select_row)
+        sep = QFrame()
+        sep.setFixedWidth(2)
+        sep.setFixedHeight(24)
+        sep.setStyleSheet(f"background: {COLORS['border']};")
+        header_layout.addWidget(sep)
 
-        # Profile list
-        scroll = QScrollArea()
-        scroll.setWidgetResizable(True)
-        scroll.setStyleSheet(f"""
-            QScrollArea {{
-                background: {COLORS['bg_darker']};
-                border: 1px solid {COLORS['border']};
-                border-radius: 8px;
-            }}
-        """)
+        header_title = QLabel("📁 PROFILES")
+        header_title.setStyleSheet(f"color: {COLORS['neon_mint']}; font-size: 12px; font-weight: bold; letter-spacing: 2px;")
+        header_layout.addWidget(header_title)
 
-        self.profile_list_widget = QWidget()
-        self.profile_list_layout = QVBoxLayout(self.profile_list_widget)
-        self.profile_list_layout.setContentsMargins(8, 8, 8, 8)
-        self.profile_list_layout.setSpacing(4)
-        self.profile_list_layout.addStretch()
+        self.count_label = QLabel("[0]")
+        self.count_label.setStyleSheet(f"color: {COLORS['text_muted']}; font-size: 11px;")
+        header_layout.addWidget(self.count_label)
 
-        scroll.setWidget(self.profile_list_widget)
-        left_layout.addWidget(scroll, 1)
+        header_layout.addStretch()
 
-        content.addWidget(left_card)
+        self.selected_label = QLabel("")
+        self.selected_label.setStyleSheet(f"color: {COLORS['neon_cyan']}; font-size: 11px;")
+        header_layout.addWidget(self.selected_label)
 
-        # Right panel - Login settings
-        right_card = CyberCard(COLORS['neon_cyan'])
-        right_layout = QVBoxLayout(right_card)
-        right_layout.setContentsMargins(12, 12, 12, 12)
+        profiles_layout.addWidget(header)
 
-        # Import XLSX section
-        import_title = QLabel("📥 Import tai khoan Facebook")
-        import_title.setStyleSheet(f"color: {COLORS['text_primary']}; font-size: 14px; font-weight: bold;")
-        right_layout.addWidget(import_title)
+        # Table
+        self.table = CyberTable(["✓", "NAME", "STATUS", "FB"])
+        self.table.setColumnWidth(0, 50)
+        self.table.setColumnWidth(1, 200)
+        self.table.setColumnWidth(2, 100)
+        self.table.setColumnWidth(3, 100)
 
-        import_hint = QLabel("XLSX: A(Status), B(UID), C(Password), D(2FA), E(Email), F(Email Pass)")
-        import_hint.setStyleSheet(f"color: {COLORS['text_muted']}; font-size: 10px;")
-        import_hint.setWordWrap(True)
-        right_layout.addWidget(import_hint)
+        profiles_layout.addWidget(self.table)
+        content.addWidget(profiles_card, 1)
 
-        import_row = QHBoxLayout()
-        self.xlsx_input = CyberInput("Chon file XLSX...")
-        self.xlsx_input.setReadOnly(True)
-        import_row.addWidget(self.xlsx_input, 1)
+        # RIGHT - Settings & Actions
+        settings_card = CyberCard(COLORS['neon_purple'])
+        settings_card.setFixedWidth(320)
+        settings_layout = QVBoxLayout(settings_card)
+        settings_layout.setContentsMargins(16, 16, 16, 16)
+        settings_layout.setSpacing(12)
 
-        btn_browse = CyberButton("Chon file", "secondary", "📂")
-        btn_browse.clicked.connect(self._browse_xlsx)
-        import_row.addWidget(btn_browse)
+        # Title
+        settings_title = QLabel("⚙️ CAI DAT LOGIN")
+        settings_title.setStyleSheet(f"color: {COLORS['neon_purple']}; font-size: 14px; font-weight: bold; letter-spacing: 2px;")
+        settings_layout.addWidget(settings_title)
 
-        right_layout.addLayout(import_row)
-
-        self.account_info = QLabel("Chua import file")
-        self.account_info.setStyleSheet(f"color: {COLORS['text_secondary']}; font-size: 11px;")
-        right_layout.addWidget(self.account_info)
-
-        # Account preview
-        self.account_scroll = QScrollArea()
-        self.account_scroll.setWidgetResizable(True)
-        self.account_scroll.setFixedHeight(120)
-        self.account_scroll.setStyleSheet(f"""
-            QScrollArea {{
-                background: {COLORS['bg_darker']};
-                border: 1px solid {COLORS['border']};
-                border-radius: 8px;
-            }}
-        """)
-
-        self.account_list_widget = QWidget()
-        self.account_list_layout = QVBoxLayout(self.account_list_widget)
-        self.account_list_layout.setContentsMargins(8, 8, 8, 8)
-        self.account_list_layout.setSpacing(2)
-
-        placeholder = QLabel("Import XLSX de xem danh sach")
-        placeholder.setStyleSheet(f"color: {COLORS['text_muted']}; font-size: 11px;")
-        placeholder.setAlignment(Qt.AlignCenter)
-        self.account_list_layout.addWidget(placeholder)
-
-        self.account_scroll.setWidget(self.account_list_widget)
-        right_layout.addWidget(self.account_scroll)
-
-        # Login settings
-        settings_title = QLabel("⚙️ Cai dat Login")
-        settings_title.setStyleSheet(f"color: {COLORS['text_primary']}; font-size: 14px; font-weight: bold;")
-        right_layout.addWidget(settings_title)
-
-        settings_row1 = QHBoxLayout()
-
+        # Threads
+        threads_row = QHBoxLayout()
         threads_label = QLabel("So luong:")
         threads_label.setStyleSheet(f"color: {COLORS['text_secondary']}; font-size: 12px;")
-        settings_row1.addWidget(threads_label)
+        threads_label.setFixedWidth(80)
+        threads_row.addWidget(threads_label)
 
-        self.login_threads = QSpinBox()
-        self.login_threads.setRange(1, 10)
-        self.login_threads.setValue(3)
-        self.login_threads.setFixedWidth(60)
-        self.login_threads.setStyleSheet(f"""
+        self.threads_spin = QSpinBox()
+        self.threads_spin.setRange(1, 10)
+        self.threads_spin.setValue(3)
+        self.threads_spin.setStyleSheet(f"""
             QSpinBox {{
-                background: {COLORS['bg_darker']};
+                background: {COLORS['bg_card']};
                 color: {COLORS['text_primary']};
-                border: 1px solid {COLORS['border']};
-                border-radius: 4px;
-                padding: 4px;
+                border: 2px solid {COLORS['border']};
+                border-radius: 8px;
+                padding: 6px 12px;
+                font-size: 14px;
+            }}
+            QSpinBox:focus {{
+                border-color: {COLORS['neon_cyan']};
             }}
         """)
-        settings_row1.addWidget(self.login_threads)
+        threads_row.addWidget(self.threads_spin)
+        threads_row.addStretch()
 
+        settings_layout.addLayout(threads_row)
+
+        # Delay
+        delay_row = QHBoxLayout()
         delay_label = QLabel("Delay (s):")
         delay_label.setStyleSheet(f"color: {COLORS['text_secondary']}; font-size: 12px;")
-        settings_row1.addWidget(delay_label)
+        delay_label.setFixedWidth(80)
+        delay_row.addWidget(delay_label)
 
         self.delay_spin = QSpinBox()
         self.delay_spin.setRange(1, 60)
         self.delay_spin.setValue(5)
-        self.delay_spin.setFixedWidth(60)
         self.delay_spin.setStyleSheet(f"""
             QSpinBox {{
-                background: {COLORS['bg_darker']};
+                background: {COLORS['bg_card']};
                 color: {COLORS['text_primary']};
-                border: 1px solid {COLORS['border']};
-                border-radius: 4px;
-                padding: 4px;
+                border: 2px solid {COLORS['border']};
+                border-radius: 8px;
+                padding: 6px 12px;
+                font-size: 14px;
+            }}
+            QSpinBox:focus {{
+                border-color: {COLORS['neon_cyan']};
             }}
         """)
-        settings_row1.addWidget(self.delay_spin)
-        settings_row1.addStretch()
+        delay_row.addWidget(self.delay_spin)
+        delay_row.addStretch()
 
-        right_layout.addLayout(settings_row1)
-
-        # Options
-        options_row = QHBoxLayout()
-
-        self.delete_bad_cb = CyberCheckBox()
-        options_row.addWidget(self.delete_bad_cb)
-        delete_label = QLabel("Xoa profile neu nick DIE")
-        delete_label.setStyleSheet(f"color: {COLORS['text_secondary']}; font-size: 11px;")
-        options_row.addWidget(delete_label)
-
-        self.save_xlsx_cb = CyberCheckBox()
-        self.save_xlsx_cb.setChecked(True)
-        options_row.addWidget(self.save_xlsx_cb)
-        save_label = QLabel("Luu trang thai vao XLSX")
-        save_label.setStyleSheet(f"color: {COLORS['text_secondary']}; font-size: 11px;")
-        options_row.addWidget(save_label)
-        options_row.addStretch()
-
-        right_layout.addLayout(options_row)
+        settings_layout.addLayout(delay_row)
 
         # Dest folder
         dest_row = QHBoxLayout()
-        dest_label = QLabel("Folder dich (LIVE):")
+        dest_label = QLabel("Folder dich:")
         dest_label.setStyleSheet(f"color: {COLORS['text_secondary']}; font-size: 12px;")
+        dest_label.setFixedWidth(80)
         dest_row.addWidget(dest_label)
 
-        self.dest_folder_combo = CyberComboBox(["-- Khong chuyen --"])
-        self.dest_folder_combo.setFixedWidth(200)
-        dest_row.addWidget(self.dest_folder_combo)
-        dest_row.addStretch()
+        self.dest_combo = CyberComboBox(["-- Khong chuyen --"])
+        dest_row.addWidget(self.dest_combo)
 
-        right_layout.addLayout(dest_row)
+        settings_layout.addLayout(dest_row)
 
-        # Action buttons
-        btn_row = QHBoxLayout()
+        # Options
+        options_title = QLabel("📋 TUY CHON")
+        options_title.setStyleSheet(f"color: {COLORS['neon_cyan']}; font-size: 12px; font-weight: bold; letter-spacing: 1px;")
+        settings_layout.addWidget(options_title)
 
-        self.btn_start = CyberButton("Bat dau Login", "success", "▶️")
-        self.btn_start.clicked.connect(self._start_login)
-        btn_row.addWidget(self.btn_start)
+        # Delete bad
+        delete_row = QHBoxLayout()
+        self.delete_cb = CyberCheckBox()
+        delete_row.addWidget(self.delete_cb)
+        delete_label = QLabel("Xoa profile neu nick DIE")
+        delete_label.setStyleSheet(f"color: {COLORS['text_secondary']}; font-size: 11px;")
+        delete_row.addWidget(delete_label)
+        delete_row.addStretch()
+        settings_layout.addLayout(delete_row)
 
-        self.btn_stop = CyberButton("Dung", "danger", "⏹️")
-        self.btn_stop.clicked.connect(self._stop_login)
-        btn_row.addWidget(self.btn_stop)
-        btn_row.addStretch()
+        # Save XLSX
+        save_row = QHBoxLayout()
+        self.save_cb = CyberCheckBox()
+        self.save_cb.setChecked(True)
+        save_row.addWidget(self.save_cb)
+        save_label = QLabel("Luu trang thai vao XLSX")
+        save_label.setStyleSheet(f"color: {COLORS['text_secondary']}; font-size: 11px;")
+        save_row.addWidget(save_label)
+        save_row.addStretch()
+        settings_layout.addLayout(save_row)
 
-        right_layout.addLayout(btn_row)
+        settings_layout.addStretch()
+
+        # Actions
+        actions_title = QLabel("🚀 HANH DONG")
+        actions_title.setStyleSheet(f"color: {COLORS['neon_pink']}; font-size: 12px; font-weight: bold; letter-spacing: 1px;")
+        settings_layout.addWidget(actions_title)
+
+        btn_check = CyberButton("CHECK FB", "cyan", "🔍")
+        btn_check.clicked.connect(self._check_fb_status)
+        settings_layout.addWidget(btn_check)
+
+        btn_start = CyberButton("BAT DAU LOGIN", "success", "▶️")
+        btn_start.clicked.connect(self._start_login)
+        settings_layout.addWidget(btn_start)
+
+        btn_stop = CyberButton("DUNG", "danger", "⏹️")
+        btn_stop.clicked.connect(self._stop_login)
+        settings_layout.addWidget(btn_stop)
 
         # Progress
         self.progress_label = QLabel("")
-        self.progress_label.setStyleSheet(f"color: {COLORS['neon_cyan']}; font-size: 12px; font-weight: bold;")
-        right_layout.addWidget(self.progress_label)
+        self.progress_label.setStyleSheet(f"color: {COLORS['neon_mint']}; font-size: 11px;")
+        self.progress_label.setAlignment(Qt.AlignCenter)
+        settings_layout.addWidget(self.progress_label)
 
-        self.progress_bar = QProgressBar()
-        self.progress_bar.setStyleSheet(f"""
-            QProgressBar {{
-                background: {COLORS['bg_darker']};
-                border: 1px solid {COLORS['border']};
-                border-radius: 4px;
-                height: 16px;
-            }}
-            QProgressBar::chunk {{
-                background: {COLORS['neon_cyan']};
-                border-radius: 3px;
-            }}
-        """)
-        right_layout.addWidget(self.progress_bar)
-
-        # Log
-        log_title = QLabel("📋 Log")
-        log_title.setStyleSheet(f"color: {COLORS['text_primary']}; font-size: 14px; font-weight: bold;")
-        right_layout.addWidget(log_title)
-
-        self.log_text = QTextEdit()
-        self.log_text.setReadOnly(True)
-        self.log_text.setStyleSheet(f"""
-            QTextEdit {{
-                background: {COLORS['bg_darker']};
-                color: {COLORS['text_secondary']};
-                border: 1px solid {COLORS['border']};
-                border-radius: 8px;
-                font-family: 'Consolas', monospace;
-                font-size: 11px;
-            }}
-        """)
-        right_layout.addWidget(self.log_text, 1)
-
-        content.addWidget(right_card, 1)
+        content.addWidget(settings_card)
         layout.addLayout(content, 1)
 
     def _load_folders(self):
-        """Load danh sach folders"""
+        """Load folders tu Hidemium"""
+        self.log("Loading folders...", "info")
+
         def fetch():
             try:
                 return api.get_folders(limit=100)
@@ -393,19 +329,18 @@ class LoginPage(QWidget):
             self.folders = folders or []
 
             self.folder_combo.clear()
-            self.folder_combo.addItem("-- Chon --")
+            self.folder_combo.addItem("📁 Chon folder")
             for f in self.folders:
                 name = f.get('name', 'Unknown')
                 self.folder_combo.addItem(f"📁 {name}")
 
-            # Update dest folder combo
-            self.dest_folder_combo.clear()
-            self.dest_folder_combo.addItem("-- Khong chuyen --")
+            self.dest_combo.clear()
+            self.dest_combo.addItem("-- Khong chuyen --")
             for f in self.folders:
                 name = f.get('name', 'Unknown')
-                self.dest_folder_combo.addItem(f"📁 {name}")
+                self.dest_combo.addItem(f"📁 {name}")
 
-            self._add_log(f"Da tai {len(self.folders)} folders")
+            self.log(f"Loaded {len(self.folders)} folders", "success")
 
         def run():
             result = fetch()
@@ -418,13 +353,15 @@ class LoginPage(QWidget):
             self._load_profiles()
 
     def _load_profiles(self):
-        """Load profiles theo folder"""
+        """Load profiles tu folder"""
         folder_idx = self.folder_combo.currentIndex()
         if folder_idx <= 0:
             return
 
         folder = self.folders[folder_idx - 1]
         folder_id = folder.get('id')
+
+        self.log(f"Loading profiles from {folder.get('name')}...", "info")
 
         def fetch():
             try:
@@ -434,9 +371,9 @@ class LoginPage(QWidget):
 
         def on_complete(profiles):
             self.profiles = profiles or []
-            self._render_profiles()
+            self._update_table()
             self._update_stats()
-            self._add_log(f"Da tai {len(self.profiles)} profiles")
+            self.log(f"Loaded {len(self.profiles)} profiles", "success")
 
         def run():
             result = fetch()
@@ -444,106 +381,74 @@ class LoginPage(QWidget):
 
         threading.Thread(target=run, daemon=True).start()
 
-    def _render_profiles(self):
-        """Render danh sach profiles"""
-        # Clear old
-        while self.profile_list_layout.count() > 0:
-            item = self.profile_list_layout.takeAt(0)
-            if item.widget():
-                item.widget().deleteLater()
-
+    def _update_table(self):
+        """Update table voi profiles"""
+        self.table.setRowCount(len(self.profiles))
         self.profile_checkboxes.clear()
 
-        if not self.profiles:
-            label = QLabel("Khong co profile nao")
-            label.setStyleSheet(f"color: {COLORS['text_muted']}; font-size: 11px;")
-            label.setAlignment(Qt.AlignCenter)
-            self.profile_list_layout.addWidget(label)
-            self.profile_list_layout.addStretch()
-            return
-
-        # Get filter
-        filter_value = "all"
-        for btn in self.filter_group.buttons():
-            if btn.isChecked():
-                filter_value = btn.property("filter_value")
-                break
-
-        visible_count = 0
-        for profile in self.profiles:
+        for row, profile in enumerate(self.profiles):
             uuid = profile.get('uuid', '')
             name = profile.get('name', 'Unknown')
+            status = profile.get('status', 'stopped')
+            fb_status = self.profile_status.get(uuid, {})
+            has_fb = fb_status.get('has_fb')
 
-            # Check filter
-            status = self.profile_status.get(uuid, {})
-            has_fb = status.get('has_fb')
+            # Checkbox
+            cb_widget = QWidget()
+            cb_widget.setStyleSheet("background: transparent;")
+            cb_layout = QHBoxLayout(cb_widget)
+            cb_layout.setContentsMargins(0, 0, 0, 0)
+            cb_layout.setAlignment(Qt.AlignCenter)
+            checkbox = CyberCheckBox()
+            checkbox.stateChanged.connect(self._update_selection_count)
+            cb_layout.addWidget(checkbox)
+            self.table.setCellWidget(row, 0, cb_widget)
+            self.profile_checkboxes[uuid] = checkbox
 
-            if filter_value == "no_fb" and has_fb is True:
-                continue
-            if filter_value == "has_fb" and has_fb is not True:
-                continue
-
-            visible_count += 1
-
-            # Create row
-            row = QWidget()
-            row.setStyleSheet(f"background: {COLORS['bg_card']}; border-radius: 4px;")
-            row_layout = QHBoxLayout(row)
-            row_layout.setContentsMargins(8, 4, 8, 4)
-            row_layout.setSpacing(8)
-
-            cb = CyberCheckBox()
-            cb.stateChanged.connect(self._update_selection_count)
-            self.profile_checkboxes[uuid] = cb
-            row_layout.addWidget(cb)
-
-            name_label = QLabel(name[:25] + "..." if len(name) > 25 else name)
-            name_label.setStyleSheet(f"color: {COLORS['text_primary']}; font-size: 11px;")
-            row_layout.addWidget(name_label, 1)
+            # Name
+            self.table.setItem(row, 1, QTableWidgetItem(name))
 
             # Status
+            status_text = "🟢 Running" if status == "running" else "⚫ Stopped"
+            self.table.setItem(row, 2, QTableWidgetItem(status_text))
+
+            # FB
             if has_fb is True:
-                status_text = "✅"
-                status_color = COLORS['neon_mint']
+                fb_text = "✅ Co FB"
             elif has_fb is False:
-                status_text = "❌"
-                status_color = COLORS['neon_coral']
+                fb_text = "❌ Chua"
             else:
-                status_text = "❓"
-                status_color = COLORS['text_muted']
+                fb_text = "❓ Chua check"
+            self.table.setItem(row, 3, QTableWidgetItem(fb_text))
 
-            status_label = QLabel(status_text)
-            status_label.setStyleSheet(f"color: {status_color}; font-size: 12px;")
-            row_layout.addWidget(status_label)
+        self.count_label.setText(f"[{len(self.profiles)} profiles]")
 
-            self.profile_list_layout.addWidget(row)
-
-        self.profile_list_layout.addStretch()
-        self.stat_total.set_value(str(visible_count))
-
-    def _apply_filter(self):
-        self._render_profiles()
-
-    def _toggle_all(self, state):
+    def _toggle_select_all(self, state):
         checked = state == Qt.Checked
-        for cb in self.profile_checkboxes.values():
+        count = 0
+        for uuid, cb in self.profile_checkboxes.items():
             cb.setChecked(checked)
-        self._update_selection_count()
+            if checked:
+                count += 1
+        self.selected_label.setText(f"✓ {count} da chon" if checked else "")
+        self._update_stats()
 
     def _update_selection_count(self):
         count = sum(1 for cb in self.profile_checkboxes.values() if cb.isChecked())
-        self.count_label.setText(f"({count} da chon)")
+        self.selected_label.setText(f"✓ {count} da chon" if count > 0 else "")
         self.stat_selected.set_value(str(count))
 
     def _update_stats(self):
-        self.stat_total.set_value(str(len(self.profiles)))
-        self._update_selection_count()
-        self.stat_accounts.set_value(str(len(self.accounts)))
+        self.stat_profiles.set_value(str(len(self.profiles)))
+        selected = sum(1 for cb in self.profile_checkboxes.values() if cb.isChecked())
+        self.stat_selected.set_value(str(selected))
+        unused = len([a for a in self.accounts if not a.get('status')])
+        self.stat_accounts.set_value(str(unused))
 
     def _browse_xlsx(self):
         """Chon file XLSX"""
         if not HAS_OPENPYXL:
-            QMessageBox.warning(self, "Loi", "Can cai dat openpyxl: pip install openpyxl")
+            QMessageBox.warning(self, "Loi", "Can cai dat openpyxl:\npip install openpyxl")
             return
 
         path, _ = QFileDialog.getOpenFileName(
@@ -556,14 +461,14 @@ class LoginPage(QWidget):
             self._load_xlsx()
 
     def _load_xlsx(self):
-        """Load tai khoan tu file XLSX"""
+        """Load tai khoan tu XLSX"""
         try:
             self.workbook = openpyxl.load_workbook(self.xlsx_path)
             sheet = self.workbook.active
 
             self.accounts = []
             for row in sheet.iter_rows(min_row=2, values_only=True):
-                if row[1]:  # UID
+                if row[1]:
                     self.accounts.append({
                         'status': row[0] or '',
                         'uid': str(row[1]),
@@ -573,58 +478,36 @@ class LoginPage(QWidget):
                         'email_pass': str(row[5]) if len(row) > 5 and row[5] else ''
                     })
 
-            # Filter unused accounts
             unused = [a for a in self.accounts if not a['status']]
-            self.account_info.setText(f"Da import {len(self.accounts)} tai khoan ({len(unused)} chua dung)")
             self.stat_accounts.set_value(str(len(unused)))
-
-            self._render_accounts()
-            self._add_log(f"Import {len(self.accounts)} tai khoan")
+            self.log(f"Import {len(self.accounts)} accounts ({len(unused)} unused)", "success")
 
         except Exception as e:
-            self._add_log(f"Loi doc file: {e}")
-
-    def _render_accounts(self):
-        """Render danh sach accounts"""
-        while self.account_list_layout.count() > 0:
-            item = self.account_list_layout.takeAt(0)
-            if item.widget():
-                item.widget().deleteLater()
-
-        unused = [a for a in self.accounts if not a['status']]
-        for acc in unused[:10]:  # Show max 10
-            label = QLabel(f"👤 {acc['uid']} - {'✓ 2FA' if acc['2fa'] else 'No 2FA'}")
-            label.setStyleSheet(f"color: {COLORS['text_secondary']}; font-size: 10px;")
-            self.account_list_layout.addWidget(label)
-
-        if len(unused) > 10:
-            more = QLabel(f"... va {len(unused) - 10} tai khoan khac")
-            more.setStyleSheet(f"color: {COLORS['text_muted']}; font-size: 10px;")
-            self.account_list_layout.addWidget(more)
+            self.log(f"Error: {e}", "error")
 
     def _check_fb_status(self):
-        """Check trang thai FB cua profiles"""
-        self._add_log("Check FB status: Tinh nang dang phat trien...")
+        """Check FB status"""
+        self.log("Check FB: Dang phat trien...", "info")
+        self.progress_label.setText("Tinh nang dang phat trien")
 
     def _start_login(self):
-        """Bat dau qua trinh login"""
+        """Bat dau login"""
         selected = [uuid for uuid, cb in self.profile_checkboxes.items() if cb.isChecked()]
-        unused = [a for a in self.accounts if not a['status']]
+        unused = [a for a in self.accounts if not a.get('status')]
 
         if not selected:
             QMessageBox.warning(self, "Loi", "Chua chon profile nao!")
             return
 
         if not unused:
-            QMessageBox.warning(self, "Loi", "Khong co tai khoan nao chua su dung!")
+            QMessageBox.warning(self, "Loi", "Khong co tai khoan chua dung!")
             return
 
         self._is_running = True
         self._stop_requested = False
-        self._add_log(f"Bat dau login {len(selected)} profiles voi {len(unused)} tai khoan")
-        self.progress_bar.setMaximum(min(len(selected), len(unused)))
+        total = min(len(selected), len(unused))
+        self.log(f"Bat dau login {total} profiles...", "info")
 
-        # Start login thread
         def do_login():
             count = 0
             for i, uuid in enumerate(selected):
@@ -634,37 +517,30 @@ class LoginPage(QWidget):
                 account = unused[i]
                 name = next((p.get('name', '') for p in self.profiles if p.get('uuid') == uuid), uuid[:8])
 
-                QTimer.singleShot(0, lambda m=f"[{i+1}] Login {name}...": self._add_log(m))
-                QTimer.singleShot(0, lambda v=i+1: self.progress_bar.setValue(v))
+                QTimer.singleShot(0, lambda m=f"[{i+1}/{total}] {name}": self.progress_label.setText(m))
+                QTimer.singleShot(0, lambda m=f"Login {name}...": self.log(m, "info"))
 
-                # Goi API open browser
                 try:
                     result = api.open_browser(uuid)
                     if result.get('status') == 'successfully':
-                        QTimer.singleShot(0, lambda m=f"[{i+1}] Da mo browser {name}": self._add_log(m))
                         count += 1
+                        QTimer.singleShot(0, lambda m=f"Opened {name}": self.log(m, "success"))
                     else:
-                        QTimer.singleShot(0, lambda m=f"[{i+1}] Loi mo browser: {result.get('title', 'Unknown')}": self._add_log(m))
+                        QTimer.singleShot(0, lambda m=f"Failed: {result.get('title', 'Error')}": self.log(m, "error"))
                 except Exception as e:
-                    QTimer.singleShot(0, lambda m=f"[{i+1}] Exception: {e}": self._add_log(m))
+                    QTimer.singleShot(0, lambda m=f"Error: {e}": self.log(m, "error"))
 
                 import time
                 time.sleep(self.delay_spin.value())
 
             self._is_running = False
-            QTimer.singleShot(0, lambda: self._add_log(f"Hoan thanh! Da mo {count} profiles"))
-            QTimer.singleShot(0, lambda: self.progress_label.setText(f"Hoan thanh: {count}/{len(selected)}"))
+            QTimer.singleShot(0, lambda: self.progress_label.setText(f"Done: {count}/{total}"))
+            QTimer.singleShot(0, lambda: self.log(f"Completed {count}/{total}", "success"))
 
         threading.Thread(target=do_login, daemon=True).start()
 
     def _stop_login(self):
-        """Dung qua trinh login"""
+        """Dung login"""
         self._stop_requested = True
-        self._add_log("Dang dung...")
-
-    def _add_log(self, message: str):
-        """Them log"""
-        from datetime import datetime
-        time_str = datetime.now().strftime("%H:%M:%S")
-        self.log_text.append(f"[{time_str}] {message}")
-        self.log(message, "info")
+        self.log("Stopping...", "info")
+        self.progress_label.setText("Dang dung...")

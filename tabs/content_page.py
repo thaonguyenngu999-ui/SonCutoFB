@@ -1,19 +1,21 @@
 """
 Content Page - Quan ly noi dung dang bai
-PySide6 version
+PySide6 version - BEAUTIFUL UI like ProfilesPage
 """
 import threading
 from typing import List, Dict
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QFrame,
-    QScrollArea, QMessageBox, QTextEdit, QFileDialog
+    QScrollArea, QMessageBox, QTextEdit, QFileDialog,
+    QTableWidgetItem, QInputDialog
 )
 from PySide6.QtCore import Qt, QTimer
+from PySide6.QtGui import QColor
 
 from config import COLORS
 from widgets import (
     CyberButton, CyberInput, CyberComboBox, CyberCard,
-    CyberTitle, CyberStatCard, CyberCheckBox
+    CyberTitle, CyberStatCard, CyberTable, CyberCheckBox
 )
 from db import (
     get_categories, save_category, delete_category,
@@ -22,7 +24,7 @@ from db import (
 
 
 class ContentPage(QWidget):
-    """Content Page - Quan ly noi dung"""
+    """Content Page - Quan ly noi dung - BEAUTIFUL UI"""
 
     def __init__(self, log_func, parent=None):
         super().__init__(parent)
@@ -31,6 +33,7 @@ class ContentPage(QWidget):
         self.contents: List[Dict] = []
         self.current_category_id = None
         self.editing_content = None
+        self.content_checkboxes: Dict[int, CyberCheckBox] = {}
 
         self._setup_ui()
         QTimer.singleShot(500, self._load_data)
@@ -40,57 +43,77 @@ class ContentPage(QWidget):
         layout.setContentsMargins(16, 12, 16, 12)
         layout.setSpacing(10)
 
-        # Top bar
+        # ========== TOP BAR ==========
         top_bar = QHBoxLayout()
-        title = CyberTitle("Content", "Quan ly noi dung", "yellow")
+        top_bar.setSpacing(12)
+
+        title = CyberTitle("Content", "Quan ly noi dung dang bai", "yellow")
         top_bar.addWidget(title)
+
         top_bar.addStretch()
 
-        self.stat_categories = CyberStatCard("CATEGORIES", "0", "📁", "yellow")
-        self.stat_categories.setFixedWidth(140)
+        self.stat_categories = CyberStatCard("DANH MUC", "0", "📁", "yellow")
+        self.stat_categories.setFixedWidth(160)
         top_bar.addWidget(self.stat_categories)
 
         self.stat_contents = CyberStatCard("NOI DUNG", "0", "📝", "cyan")
-        self.stat_contents.setFixedWidth(140)
+        self.stat_contents.setFixedWidth(160)
         top_bar.addWidget(self.stat_contents)
+
+        self.stat_selected = CyberStatCard("DA CHON", "0", "✓", "mint")
+        self.stat_selected.setFixedWidth(160)
+        top_bar.addWidget(self.stat_selected)
 
         layout.addLayout(top_bar)
 
-        # Main content - 3 columns
+        # ========== MAIN CONTENT - 3 PANELS ==========
         content = QHBoxLayout()
         content.setSpacing(12)
 
-        # Left panel - Categories
+        # ========== LEFT PANEL - Categories ==========
         left_card = CyberCard(COLORS['neon_yellow'])
-        left_card.setFixedWidth(220)
+        left_card.setFixedWidth(240)
         left_layout = QVBoxLayout(left_card)
-        left_layout.setContentsMargins(12, 12, 12, 12)
+        left_layout.setContentsMargins(2, 2, 2, 2)
 
         # Header
-        cat_header = QHBoxLayout()
-        cat_label = QLabel("📁 Danh muc")
-        cat_label.setStyleSheet(f"color: {COLORS['text_primary']}; font-size: 14px; font-weight: bold;")
-        cat_header.addWidget(cat_label)
+        cat_header = QWidget()
+        cat_header.setFixedHeight(44)
+        cat_header.setStyleSheet(f"background: {COLORS['bg_darker']}; border-radius: 14px 14px 0 0;")
+        cat_header_layout = QHBoxLayout(cat_header)
+        cat_header_layout.setContentsMargins(16, 0, 16, 0)
+        cat_header_layout.setSpacing(8)
+
+        cat_title = QLabel("📁 DANH MUC")
+        cat_title.setStyleSheet(f"color: {COLORS['neon_yellow']}; font-size: 12px; font-weight: bold; letter-spacing: 2px;")
+        cat_header_layout.addWidget(cat_title)
+
+        self.cat_count_label = QLabel("[0]")
+        self.cat_count_label.setStyleSheet(f"color: {COLORS['text_muted']}; font-size: 11px;")
+        cat_header_layout.addWidget(self.cat_count_label)
+
+        cat_header_layout.addStretch()
 
         btn_add_cat = CyberButton("+", "success")
         btn_add_cat.setFixedSize(32, 32)
         btn_add_cat.clicked.connect(self._add_category)
-        cat_header.addWidget(btn_add_cat)
+        cat_header_layout.addWidget(btn_add_cat)
 
-        left_layout.addLayout(cat_header)
+        left_layout.addWidget(cat_header)
 
-        # Category list
+        # Category list scroll
         scroll_cat = QScrollArea()
         scroll_cat.setWidgetResizable(True)
         scroll_cat.setStyleSheet(f"""
             QScrollArea {{
                 background: {COLORS['bg_darker']};
-                border: 1px solid {COLORS['border']};
-                border-radius: 8px;
+                border: none;
+                border-radius: 0 0 14px 14px;
             }}
         """)
 
         self.cat_list_widget = QWidget()
+        self.cat_list_widget.setStyleSheet(f"background: {COLORS['bg_darker']};")
         self.cat_list_layout = QVBoxLayout(self.cat_list_widget)
         self.cat_list_layout.setContentsMargins(8, 8, 8, 8)
         self.cat_list_layout.setSpacing(4)
@@ -101,140 +124,214 @@ class ContentPage(QWidget):
 
         content.addWidget(left_card)
 
-        # Middle panel - Content list
+        # ========== MIDDLE PANEL - Content Table ==========
         middle_card = CyberCard(COLORS['neon_cyan'])
         middle_layout = QVBoxLayout(middle_card)
-        middle_layout.setContentsMargins(12, 12, 12, 12)
+        middle_layout.setContentsMargins(2, 2, 2, 2)
 
         # Header
-        content_header = QHBoxLayout()
-        content_label = QLabel("📝 Noi dung")
-        content_label.setStyleSheet(f"color: {COLORS['text_primary']}; font-size: 14px; font-weight: bold;")
-        content_header.addWidget(content_label)
+        content_header = QWidget()
+        content_header.setFixedHeight(44)
+        content_header.setStyleSheet(f"background: {COLORS['bg_darker']}; border-radius: 14px 14px 0 0;")
+        content_header_layout = QHBoxLayout(content_header)
+        content_header_layout.setContentsMargins(16, 0, 16, 0)
+        content_header_layout.setSpacing(12)
 
-        content_header.addStretch()
+        # Select All
+        select_widget = QWidget()
+        select_layout = QHBoxLayout(select_widget)
+        select_layout.setContentsMargins(0, 0, 0, 0)
+        select_layout.setSpacing(8)
 
+        self.select_all_cb = CyberCheckBox()
+        self.select_all_cb.stateChanged.connect(self._toggle_select_all)
+        select_layout.addWidget(self.select_all_cb)
+
+        select_label = QLabel("Chon tat ca")
+        select_label.setStyleSheet(f"color: {COLORS['text_secondary']}; font-size: 12px;")
+        select_label.setCursor(Qt.PointingHandCursor)
+        select_label.mousePressEvent = lambda e: self.select_all_cb.setChecked(not self.select_all_cb.isChecked())
+        select_layout.addWidget(select_label)
+
+        content_header_layout.addWidget(select_widget)
+
+        sep = QFrame()
+        sep.setFixedWidth(2)
+        sep.setFixedHeight(24)
+        sep.setStyleSheet(f"background: {COLORS['border']};")
+        content_header_layout.addWidget(sep)
+
+        content_title = QLabel("📝 NOI DUNG")
+        content_title.setStyleSheet(f"color: {COLORS['neon_cyan']}; font-size: 12px; font-weight: bold; letter-spacing: 2px;")
+        content_header_layout.addWidget(content_title)
+
+        self.content_count_label = QLabel("[0]")
+        self.content_count_label.setStyleSheet(f"color: {COLORS['text_muted']}; font-size: 11px;")
+        content_header_layout.addWidget(self.content_count_label)
+
+        content_header_layout.addStretch()
+
+        self.selected_label = QLabel("")
+        self.selected_label.setStyleSheet(f"color: {COLORS['neon_mint']}; font-size: 11px;")
+        content_header_layout.addWidget(self.selected_label)
+
+        # Search
         self.search_input = CyberInput("🔍 Tim kiem...")
-        self.search_input.setFixedWidth(200)
+        self.search_input.setFixedWidth(180)
         self.search_input.textChanged.connect(self._filter_contents)
-        content_header.addWidget(self.search_input)
+        content_header_layout.addWidget(self.search_input)
 
-        btn_add_content = CyberButton("Them noi dung", "success", "+")
+        btn_add_content = CyberButton("+", "success")
+        btn_add_content.setFixedSize(32, 32)
         btn_add_content.clicked.connect(self._add_content)
-        content_header.addWidget(btn_add_content)
+        content_header_layout.addWidget(btn_add_content)
 
-        middle_layout.addLayout(content_header)
+        middle_layout.addWidget(content_header)
 
-        # Content list
-        scroll_content = QScrollArea()
-        scroll_content.setWidgetResizable(True)
-        scroll_content.setStyleSheet(f"""
-            QScrollArea {{
-                background: {COLORS['bg_darker']};
-                border: 1px solid {COLORS['border']};
-                border-radius: 8px;
-            }}
-        """)
+        # Table
+        self.table = CyberTable(["✓", "TIEU DE", "NOI DUNG", "HINH"])
+        self.table.setColumnWidth(0, 50)
+        self.table.setColumnWidth(1, 200)
+        self.table.setColumnWidth(2, 300)
+        self.table.setColumnWidth(3, 80)
+        self.table.cellClicked.connect(self._on_table_click)
 
-        self.content_list_widget = QWidget()
-        self.content_list_layout = QVBoxLayout(self.content_list_widget)
-        self.content_list_layout.setContentsMargins(8, 8, 8, 8)
-        self.content_list_layout.setSpacing(4)
-
-        empty = QLabel("Chon danh muc de xem noi dung")
-        empty.setStyleSheet(f"color: {COLORS['text_muted']}; font-size: 12px;")
-        empty.setAlignment(Qt.AlignCenter)
-        self.content_list_layout.addWidget(empty)
-        self.content_list_layout.addStretch()
-
-        scroll_content.setWidget(self.content_list_widget)
-        middle_layout.addWidget(scroll_content, 1)
-
+        middle_layout.addWidget(self.table)
         content.addWidget(middle_card, 1)
 
-        # Right panel - Editor
+        # ========== RIGHT PANEL - Editor ==========
         right_card = CyberCard(COLORS['neon_mint'])
         right_card.setFixedWidth(350)
         right_layout = QVBoxLayout(right_card)
-        right_layout.setContentsMargins(12, 12, 12, 12)
+        right_layout.setContentsMargins(2, 2, 2, 2)
 
         # Header
-        editor_label = QLabel("✏️ Chinh sua")
-        editor_label.setStyleSheet(f"color: {COLORS['text_primary']}; font-size: 14px; font-weight: bold;")
-        right_layout.addWidget(editor_label)
+        editor_header = QWidget()
+        editor_header.setFixedHeight(44)
+        editor_header.setStyleSheet(f"background: {COLORS['bg_darker']}; border-radius: 14px 14px 0 0;")
+        editor_header_layout = QHBoxLayout(editor_header)
+        editor_header_layout.setContentsMargins(16, 0, 16, 0)
+
+        editor_title = QLabel("✏️ CHINH SUA")
+        editor_title.setStyleSheet(f"color: {COLORS['neon_mint']}; font-size: 12px; font-weight: bold; letter-spacing: 2px;")
+        editor_header_layout.addWidget(editor_title)
+
+        editor_header_layout.addStretch()
+
+        self.editing_label = QLabel("")
+        self.editing_label.setStyleSheet(f"color: {COLORS['neon_pink']}; font-size: 11px;")
+        editor_header_layout.addWidget(self.editing_label)
+
+        right_layout.addWidget(editor_header)
+
+        # Editor form
+        form_widget = QWidget()
+        form_widget.setStyleSheet(f"background: {COLORS['bg_darker']}; border-radius: 0 0 14px 14px;")
+        form_layout = QVBoxLayout(form_widget)
+        form_layout.setContentsMargins(16, 16, 16, 16)
+        form_layout.setSpacing(12)
+
+        # Category selection
+        cat_row = QHBoxLayout()
+        cat_label = QLabel("Danh muc:")
+        cat_label.setStyleSheet(f"color: {COLORS['text_secondary']}; font-size: 12px;")
+        cat_label.setFixedWidth(80)
+        cat_row.addWidget(cat_label)
+
+        self.cat_combo = CyberComboBox()
+        cat_row.addWidget(self.cat_combo)
+        form_layout.addLayout(cat_row)
 
         # Title
+        title_row = QHBoxLayout()
         title_label = QLabel("Tieu de:")
         title_label.setStyleSheet(f"color: {COLORS['text_secondary']}; font-size: 12px;")
-        right_layout.addWidget(title_label)
+        title_label.setFixedWidth(80)
+        title_row.addWidget(title_label)
 
-        self.title_input = CyberInput("Nhap tieu de...")
-        right_layout.addWidget(self.title_input)
+        self.title_input = CyberInput("Nhap tieu de bai viet...")
+        title_row.addWidget(self.title_input)
+        form_layout.addLayout(title_row)
 
         # Content
-        content_label2 = QLabel("Noi dung:")
-        content_label2.setStyleSheet(f"color: {COLORS['text_secondary']}; font-size: 12px;")
-        right_layout.addWidget(content_label2)
+        content_label = QLabel("Noi dung:")
+        content_label.setStyleSheet(f"color: {COLORS['text_secondary']}; font-size: 12px;")
+        form_layout.addWidget(content_label)
 
         self.content_text = QTextEdit()
-        self.content_text.setPlaceholderText("Nhap noi dung bai viet...")
+        self.content_text.setPlaceholderText("Nhap noi dung bai viet...\n\nSu dung {name}, {time}, {date} de thay the tu dong...")
         self.content_text.setStyleSheet(f"""
             QTextEdit {{
-                background: {COLORS['bg_darker']};
+                background: {COLORS['bg_card']};
                 color: {COLORS['text_primary']};
-                border: 1px solid {COLORS['border']};
-                border-radius: 8px;
-                padding: 8px;
+                border: 2px solid {COLORS['border']};
+                border-radius: 10px;
+                padding: 10px;
+                font-size: 13px;
+            }}
+            QTextEdit:focus {{
+                border-color: {COLORS['neon_cyan']};
             }}
         """)
-        right_layout.addWidget(self.content_text, 1)
+        form_layout.addWidget(self.content_text, 1)
 
         # Image
-        image_row = QHBoxLayout()
         image_label = QLabel("Hinh anh:")
         image_label.setStyleSheet(f"color: {COLORS['text_secondary']}; font-size: 12px;")
-        image_row.addWidget(image_label)
+        form_layout.addWidget(image_label)
 
-        self.image_input = CyberInput("Chon hinh...")
+        image_row = QHBoxLayout()
+
+        self.image_input = CyberInput("Chon hinh anh...")
         self.image_input.setReadOnly(True)
         image_row.addWidget(self.image_input, 1)
 
-        btn_image = CyberButton("📂", "secondary")
-        btn_image.setFixedWidth(40)
-        btn_image.clicked.connect(self._browse_image)
-        image_row.addWidget(btn_image)
+        btn_browse = CyberButton("📂", "purple")
+        btn_browse.setFixedWidth(40)
+        btn_browse.clicked.connect(self._browse_image)
+        image_row.addWidget(btn_browse)
 
-        right_layout.addLayout(image_row)
+        btn_clear_img = CyberButton("✕", "danger")
+        btn_clear_img.setFixedWidth(40)
+        btn_clear_img.clicked.connect(lambda: self.image_input.clear())
+        image_row.addWidget(btn_clear_img)
+
+        form_layout.addLayout(image_row)
 
         # Buttons
         btn_row = QHBoxLayout()
+        btn_row.setSpacing(8)
 
-        self.btn_save = CyberButton("Luu", "success", "💾")
+        self.btn_save = CyberButton("LUU", "success", "💾")
         self.btn_save.clicked.connect(self._save_content)
         btn_row.addWidget(self.btn_save)
 
-        self.btn_cancel = CyberButton("Huy", "secondary")
+        self.btn_cancel = CyberButton("HUY", "ghost")
         self.btn_cancel.clicked.connect(self._clear_editor)
         btn_row.addWidget(self.btn_cancel)
 
-        self.btn_delete = CyberButton("Xoa", "danger", "🗑️")
+        self.btn_delete = CyberButton("XOA", "danger", "🗑️")
         self.btn_delete.clicked.connect(self._delete_content)
         btn_row.addWidget(self.btn_delete)
 
-        right_layout.addLayout(btn_row)
+        form_layout.addLayout(btn_row)
+
+        right_layout.addWidget(form_widget, 1)
 
         content.addWidget(right_card)
         layout.addLayout(content, 1)
 
     def _load_data(self):
-        """Load categories"""
+        """Load categories va contents"""
         self.categories = get_categories()
         self._render_categories()
+        self._update_category_combo()
         self._update_stats()
         self.log(f"Loaded {len(self.categories)} categories", "success")
 
     def _render_categories(self):
         """Render danh sach categories"""
+        # Clear old items
         while self.cat_list_layout.count() > 0:
             item = self.cat_list_layout.takeAt(0)
             if item.widget():
@@ -247,58 +344,100 @@ class ContentPage(QWidget):
 
             row = QWidget()
             is_selected = cat_id == self.current_category_id
-            bg_color = COLORS['neon_yellow'] if is_selected else COLORS['bg_card']
-            row.setStyleSheet(f"background: {bg_color}; border-radius: 4px;")
-            row.setFixedHeight(40)
+            row.setFixedHeight(44)
             row.setCursor(Qt.PointingHandCursor)
 
+            if is_selected:
+                row.setStyleSheet(f"""
+                    QWidget {{
+                        background: qlineargradient(x1:0, x2:1, stop:0 {COLORS['neon_yellow']}40, stop:1 transparent);
+                        border: none;
+                        border-left: 3px solid {COLORS['neon_yellow']};
+                        border-radius: 0 8px 8px 0;
+                    }}
+                """)
+            else:
+                row.setStyleSheet(f"""
+                    QWidget {{
+                        background: transparent;
+                        border-radius: 8px;
+                    }}
+                    QWidget:hover {{
+                        background: {COLORS['bg_hover']};
+                    }}
+                """)
+
             row_layout = QHBoxLayout(row)
-            row_layout.setContentsMargins(8, 4, 8, 4)
+            row_layout.setContentsMargins(12, 4, 8, 4)
             row_layout.setSpacing(8)
 
-            name_label = QLabel(name[:15])
-            name_label.setStyleSheet(f"color: {COLORS['bg_dark'] if is_selected else COLORS['text_primary']}; font-size: 12px;")
+            # Icon
+            icon_label = QLabel("📁")
+            icon_label.setFixedWidth(20)
+            row_layout.addWidget(icon_label)
+
+            # Name
+            name_label = QLabel(name[:18] + "..." if len(name) > 18 else name)
+            name_color = COLORS['neon_yellow'] if is_selected else COLORS['text_primary']
+            name_label.setStyleSheet(f"color: {name_color}; font-size: 12px; font-weight: {'bold' if is_selected else 'normal'};")
             row_layout.addWidget(name_label, 1)
 
-            count_label = QLabel(f"({count})")
-            count_label.setStyleSheet(f"color: {COLORS['bg_darker'] if is_selected else COLORS['text_muted']}; font-size: 10px;")
-            row_layout.addWidget(count_label)
+            # Count badge
+            count_badge = QLabel(str(count))
+            count_badge.setFixedSize(24, 20)
+            count_badge.setAlignment(Qt.AlignCenter)
+            count_badge.setStyleSheet(f"""
+                background: {COLORS['bg_card']};
+                color: {COLORS['text_muted']};
+                border-radius: 10px;
+                font-size: 10px;
+            """)
+            row_layout.addWidget(count_badge)
 
-            # Click handler
-            row.mousePressEvent = lambda e, c=cat_id: self._select_category(c)
-
-            # Delete button (not for default category)
+            # Delete button (not for default)
             if cat_id != 1:
                 btn_del = CyberButton("×", "danger")
                 btn_del.setFixedSize(24, 24)
                 btn_del.clicked.connect(lambda _, cid=cat_id: self._delete_category(cid))
                 row_layout.addWidget(btn_del)
 
+            # Click handler
+            row.mousePressEvent = lambda e, c=cat_id: self._select_category(c)
+
             self.cat_list_layout.addWidget(row)
 
         self.cat_list_layout.addStretch()
+        self.cat_count_label.setText(f"[{len(self.categories)}]")
+
+    def _update_category_combo(self):
+        """Update category combo in editor"""
+        self.cat_combo.clear()
+        for cat in self.categories:
+            self.cat_combo.addItem(f"📁 {cat.get('name', 'Unknown')}")
 
     def _select_category(self, cat_id):
         """Chon category"""
         self.current_category_id = cat_id
         self._render_categories()
         self._load_contents()
+        self._clear_editor()
+
+        # Update combo selection
+        for i, cat in enumerate(self.categories):
+            if cat.get('id') == cat_id:
+                self.cat_combo.setCurrentIndex(i)
+                break
 
     def _load_contents(self):
         """Load contents theo category"""
         if not self.current_category_id:
-            return
-
-        self.contents = get_contents(self.current_category_id)
+            self.contents = []
+        else:
+            self.contents = get_contents(self.current_category_id)
         self._render_contents()
 
     def _render_contents(self, search_text=None):
-        """Render danh sach contents"""
-        while self.content_list_layout.count() > 0:
-            item = self.content_list_layout.takeAt(0)
-            if item.widget():
-                item.widget().deleteLater()
-
+        """Render contents vao table"""
         contents_to_show = self.contents
         if search_text:
             search_lower = search_text.lower()
@@ -306,106 +445,129 @@ class ContentPage(QWidget):
                                if search_lower in c.get('title', '').lower()
                                or search_lower in c.get('content', '').lower()]
 
-        if not contents_to_show:
-            empty = QLabel("Chua co noi dung nao")
-            empty.setStyleSheet(f"color: {COLORS['text_muted']}; font-size: 12px;")
-            empty.setAlignment(Qt.AlignCenter)
-            self.content_list_layout.addWidget(empty)
-        else:
-            for content in contents_to_show:
-                row = self._create_content_row(content)
-                self.content_list_layout.addWidget(row)
+        self.table.setRowCount(len(contents_to_show))
+        self.content_checkboxes.clear()
 
-        self.content_list_layout.addStretch()
+        for row, content in enumerate(contents_to_show):
+            content_id = content.get('id')
+            title = content.get('title', 'Khong co tieu de')
+            body = content.get('content', '')
+            image = content.get('image_path', '')
+
+            # Checkbox
+            cb_widget = QWidget()
+            cb_widget.setStyleSheet("background: transparent;")
+            cb_layout = QHBoxLayout(cb_widget)
+            cb_layout.setContentsMargins(0, 0, 0, 0)
+            cb_layout.setAlignment(Qt.AlignCenter)
+            checkbox = CyberCheckBox()
+            checkbox.stateChanged.connect(self._update_selection_count)
+            cb_layout.addWidget(checkbox)
+            self.table.setCellWidget(row, 0, cb_widget)
+            self.content_checkboxes[content_id] = checkbox
+
+            # Title
+            title_item = QTableWidgetItem(title[:30] + "..." if len(title) > 30 else title)
+            self.table.setItem(row, 1, title_item)
+
+            # Content preview
+            preview = body[:40] + "..." if len(body) > 40 else body
+            preview = preview.replace('\n', ' ')
+            content_item = QTableWidgetItem(preview)
+            content_item.setForeground(QColor(COLORS['text_muted']))
+            self.table.setItem(row, 2, content_item)
+
+            # Image indicator
+            has_image = "🖼️" if image else "—"
+            image_item = QTableWidgetItem(has_image)
+            image_item.setTextAlignment(Qt.AlignCenter)
+            self.table.setItem(row, 3, image_item)
+
+        self.content_count_label.setText(f"[{len(contents_to_show)} noi dung]")
         self._update_stats()
 
-    def _create_content_row(self, content: Dict):
-        """Tao row cho content"""
-        row = QWidget()
-        is_selected = content.get('id') == (self.editing_content.get('id') if self.editing_content else None)
-        bg_color = COLORS['neon_cyan'] if is_selected else COLORS['bg_card']
-        row.setStyleSheet(f"background: {bg_color}; border-radius: 4px;")
-        row.setFixedHeight(60)
-        row.setCursor(Qt.PointingHandCursor)
+    def _on_table_click(self, row, col):
+        """Handle table click - load content to editor"""
+        if col == 0:  # Checkbox column, skip
+            return
 
-        row_layout = QVBoxLayout(row)
-        row_layout.setContentsMargins(8, 4, 8, 4)
-        row_layout.setSpacing(2)
-
-        title = content.get('title', 'Khong co tieu de')
-        title_label = QLabel(title[:40] + "..." if len(title) > 40 else title)
-        title_label.setStyleSheet(f"color: {COLORS['bg_dark'] if is_selected else COLORS['text_primary']}; font-size: 12px; font-weight: bold;")
-        row_layout.addWidget(title_label)
-
-        preview = content.get('content', '')[:60] + "..." if len(content.get('content', '')) > 60 else content.get('content', '')
-        preview_label = QLabel(preview)
-        preview_label.setStyleSheet(f"color: {COLORS['bg_darker'] if is_selected else COLORS['text_muted']}; font-size: 10px;")
-        row_layout.addWidget(preview_label)
-
-        # Click handler
-        row.mousePressEvent = lambda e, c=content: self._edit_content(c)
-
-        return row
+        if row < len(self.contents):
+            content = self.contents[row]
+            self._edit_content(content)
 
     def _filter_contents(self, text):
         self._render_contents(text)
 
     def _add_category(self):
         """Them category moi"""
-        from PySide6.QtWidgets import QInputDialog
-
-        name, ok = QInputDialog.getText(self, "Them danh muc", "Ten danh muc:")
-        if ok and name:
-            save_category({'name': name})
+        name, ok = QInputDialog.getText(self, "Them danh muc", "Ten danh muc moi:")
+        if ok and name.strip():
+            save_category({'name': name.strip()})
             self.log(f"Da them danh muc: {name}", "success")
             self._load_data()
 
     def _delete_category(self, cat_id):
         """Xoa category"""
         reply = QMessageBox.question(
-            self, "Xac nhan",
-            "Ban co chac muon xoa danh muc nay?",
+            self, "Xac nhan xoa",
+            "Ban co chac muon xoa danh muc nay?\nTat ca noi dung trong danh muc se bi xoa!",
             QMessageBox.Yes | QMessageBox.No
         )
 
         if reply == QMessageBox.Yes:
             delete_category(cat_id)
             self.log("Da xoa danh muc", "success")
-            self.current_category_id = None
+            if self.current_category_id == cat_id:
+                self.current_category_id = None
+                self.contents = []
+                self._render_contents()
             self._load_data()
 
     def _add_content(self):
         """Them content moi"""
         if not self.current_category_id:
-            QMessageBox.warning(self, "Loi", "Chua chon danh muc!")
+            QMessageBox.warning(self, "Thong bao", "Vui long chon danh muc truoc!")
             return
 
         self.editing_content = None
         self._clear_editor()
+        self.editing_label.setText("TAO MOI")
+        self.title_input.setFocus()
 
     def _edit_content(self, content: Dict):
         """Edit content"""
         self.editing_content = content
+        self.editing_label.setText(f"SUA #{content.get('id')}")
+
+        # Set category
+        cat_id = content.get('category_id')
+        for i, cat in enumerate(self.categories):
+            if cat.get('id') == cat_id:
+                self.cat_combo.setCurrentIndex(i)
+                break
+
         self.title_input.setText(content.get('title', ''))
         self.content_text.setText(content.get('content', ''))
         self.image_input.setText(content.get('image_path', ''))
-        self._render_contents()
 
     def _save_content(self):
         """Luu content"""
-        if not self.current_category_id:
-            QMessageBox.warning(self, "Loi", "Chua chon danh muc!")
+        # Get category from combo
+        cat_idx = self.cat_combo.currentIndex()
+        if cat_idx < 0 or cat_idx >= len(self.categories):
+            QMessageBox.warning(self, "Loi", "Vui long chon danh muc!")
             return
 
+        category_id = self.categories[cat_idx].get('id')
         title = self.title_input.text().strip()
         content_text = self.content_text.toPlainText().strip()
 
         if not title:
-            QMessageBox.warning(self, "Loi", "Chua nhap tieu de!")
+            QMessageBox.warning(self, "Loi", "Vui long nhap tieu de!")
             return
 
         data = {
-            'category_id': self.current_category_id,
+            'category_id': category_id,
             'title': title,
             'content': content_text,
             'image_path': self.image_input.text()
@@ -415,20 +577,23 @@ class ContentPage(QWidget):
             data['id'] = self.editing_content.get('id')
 
         save_content(data)
-        self.log(f"Da luu noi dung: {title}", "success")
+        self.log(f"Da luu: {title}", "success")
 
-        self._clear_editor()
+        # Refresh
+        self.current_category_id = category_id
+        self._load_data()
         self._load_contents()
-        self._render_categories()
+        self._clear_editor()
 
     def _delete_content(self):
         """Xoa content"""
         if not self.editing_content:
+            QMessageBox.warning(self, "Thong bao", "Chua chon noi dung de xoa!")
             return
 
         reply = QMessageBox.question(
-            self, "Xac nhan",
-            "Ban co chac muon xoa noi dung nay?",
+            self, "Xac nhan xoa",
+            f"Ban co chac muon xoa '{self.editing_content.get('title')}'?",
             QMessageBox.Yes | QMessageBox.No
         )
 
@@ -442,21 +607,51 @@ class ContentPage(QWidget):
     def _clear_editor(self):
         """Clear editor"""
         self.editing_content = None
+        self.editing_label.setText("")
         self.title_input.clear()
         self.content_text.clear()
         self.image_input.clear()
-        self._render_contents()
 
     def _browse_image(self):
         """Chon hinh anh"""
         path, _ = QFileDialog.getOpenFileName(
             self, "Chon hinh anh",
-            "", "Images (*.png *.jpg *.jpeg *.gif)"
+            "", "Images (*.png *.jpg *.jpeg *.gif *.webp)"
         )
 
         if path:
             self.image_input.setText(path)
 
+    def _toggle_select_all(self, state):
+        """Toggle select all contents"""
+        checked = state == Qt.Checked
+        count = 0
+        for content_id, cb in self.content_checkboxes.items():
+            cb.setChecked(checked)
+            if checked:
+                count += 1
+        self.selected_label.setText(f"✓ {count} da chon" if checked else "")
+        self.stat_selected.set_value(str(count))
+
+    def _update_selection_count(self):
+        """Update selection count"""
+        count = sum(1 for cb in self.content_checkboxes.values() if cb.isChecked())
+        self.selected_label.setText(f"✓ {count} da chon" if count > 0 else "")
+        self.stat_selected.set_value(str(count))
+
     def _update_stats(self):
+        """Update stats cards"""
         self.stat_categories.set_value(str(len(self.categories)))
         self.stat_contents.set_value(str(len(self.contents)))
+        selected = sum(1 for cb in self.content_checkboxes.values() if cb.isChecked())
+        self.stat_selected.set_value(str(selected))
+
+    def get_selected_contents(self) -> List[Dict]:
+        """Get list of selected contents"""
+        selected = []
+        for content in self.contents:
+            content_id = content.get('id')
+            if content_id in self.content_checkboxes:
+                if self.content_checkboxes[content_id].isChecked():
+                    selected.append(content)
+        return selected

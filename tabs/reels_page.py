@@ -1,6 +1,6 @@
 """
 Reels Page - Dang Reels len Fanpage
-PySide6 version with Hidemium integration
+PySide6 version - BEAUTIFUL UI like ProfilesPage
 """
 import threading
 import os
@@ -8,30 +8,31 @@ from typing import List, Dict
 from datetime import datetime
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QFrame,
-    QScrollArea, QFileDialog, QMessageBox, QProgressBar,
-    QTextEdit, QSpinBox, QDateTimeEdit
+    QFileDialog, QMessageBox, QTableWidgetItem, QSpinBox,
+    QTextEdit, QDateTimeEdit
 )
 from PySide6.QtCore import Qt, QTimer, QDateTime
 
 from config import COLORS
 from widgets import (
     CyberButton, CyberInput, CyberComboBox, CyberCard,
-    CyberTitle, CyberStatCard, CyberCheckBox
+    CyberTitle, CyberStatCard, CyberTable, CyberCheckBox
 )
 from api_service import api
 from db import (
     get_profiles, get_pages, get_pages_for_profiles,
     get_reel_schedules, save_reel_schedule, delete_reel_schedule,
-    get_posted_reels, save_posted_reel
+    get_posted_reels, save_posted_reel, get_posted_reels_count
 )
 
 
 class ReelsPage(QWidget):
-    """Reels Page - Dang Reels"""
+    """Reels Page - Dang Reels - BEAUTIFUL UI"""
 
     def __init__(self, log_func, parent=None):
         super().__init__(parent)
         self.log = log_func
+        self.folders: List[Dict] = []
         self.profiles: List[Dict] = []
         self.pages: List[Dict] = []
         self.schedules: List[Dict] = []
@@ -42,54 +43,97 @@ class ReelsPage(QWidget):
         self.selected_page_id = None
         self.video_path = ""
 
+        # Running state
+        self._is_posting = False
+
         self._setup_ui()
-        QTimer.singleShot(500, self._load_data)
+        QTimer.singleShot(500, self._load_folders)
 
     def _setup_ui(self):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(16, 12, 16, 12)
         layout.setSpacing(10)
 
-        # Top bar
+        # ========== TOP BAR ==========
         top_bar = QHBoxLayout()
-        title = CyberTitle("Reels", "Dang Reels len Page", "pink")
+        top_bar.setSpacing(12)
+
+        title = CyberTitle("Reels", "Dang Reels len Fanpage", "pink")
         top_bar.addWidget(title)
+
         top_bar.addStretch()
 
         self.stat_profiles = CyberStatCard("PROFILES", "0", "📁", "pink")
-        self.stat_profiles.setFixedWidth(140)
+        self.stat_profiles.setFixedWidth(160)
         top_bar.addWidget(self.stat_profiles)
 
         self.stat_pages = CyberStatCard("PAGES", "0", "📄", "purple")
-        self.stat_pages.setFixedWidth(140)
+        self.stat_pages.setFixedWidth(160)
         top_bar.addWidget(self.stat_pages)
 
+        self.stat_scheduled = CyberStatCard("DA HEN", "0", "📅", "cyan")
+        self.stat_scheduled.setFixedWidth(160)
+        top_bar.addWidget(self.stat_scheduled)
+
         self.stat_posted = CyberStatCard("DA DANG", "0", "🎬", "mint")
-        self.stat_posted.setFixedWidth(140)
+        self.stat_posted.setFixedWidth(160)
         top_bar.addWidget(self.stat_posted)
 
         layout.addLayout(top_bar)
 
-        # Main content - 2 columns
+        # ========== TOOLBAR ==========
+        toolbar = QHBoxLayout()
+        toolbar.setSpacing(8)
+
+        # Folder selection
+        self.folder_combo = CyberComboBox(["📁 Chon folder"])
+        self.folder_combo.setFixedWidth(180)
+        self.folder_combo.currentIndexChanged.connect(self._on_folder_change)
+        toolbar.addWidget(self.folder_combo)
+
+        btn_load = CyberButton("TAI", "cyan", "📥")
+        btn_load.clicked.connect(self._load_profiles)
+        toolbar.addWidget(btn_load)
+
+        toolbar.addStretch()
+
+        btn_refresh = CyberButton("", "ghost", "🔄")
+        btn_refresh.setFixedWidth(40)
+        btn_refresh.clicked.connect(self._load_history)
+        toolbar.addWidget(btn_refresh)
+
+        layout.addLayout(toolbar)
+
+        # ========== MAIN CONTENT ==========
         content = QHBoxLayout()
         content.setSpacing(12)
 
-        # Left panel - Create Reel
+        # LEFT - Create Reel Form
         left_card = CyberCard(COLORS['neon_pink'])
-        left_card.setFixedWidth(400)
+        left_card.setFixedWidth(380)
         left_layout = QVBoxLayout(left_card)
-        left_layout.setContentsMargins(12, 12, 12, 12)
+        left_layout.setContentsMargins(16, 16, 16, 16)
+        left_layout.setSpacing(12)
 
-        # Title
-        create_title = QLabel("🎬 Tao Reel moi")
-        create_title.setStyleSheet(f"color: {COLORS['text_primary']}; font-size: 14px; font-weight: bold;")
-        left_layout.addWidget(create_title)
+        # Header
+        form_header = QWidget()
+        form_header.setFixedHeight(40)
+        form_header.setStyleSheet(f"background: {COLORS['bg_darker']}; border-radius: 10px;")
+        form_header_layout = QHBoxLayout(form_header)
+        form_header_layout.setContentsMargins(12, 0, 12, 0)
+
+        form_title = QLabel("🎬 TAO REEL MOI")
+        form_title.setStyleSheet(f"color: {COLORS['neon_pink']}; font-size: 12px; font-weight: bold; letter-spacing: 2px;")
+        form_header_layout.addWidget(form_title)
+        form_header_layout.addStretch()
+
+        left_layout.addWidget(form_header)
 
         # Profile selection
         profile_row = QHBoxLayout()
         profile_label = QLabel("Profile:")
         profile_label.setStyleSheet(f"color: {COLORS['text_secondary']}; font-size: 12px;")
-        profile_label.setFixedWidth(70)
+        profile_label.setFixedWidth(80)
         profile_row.addWidget(profile_label)
 
         self.profile_combo = CyberComboBox(["-- Chon Profile --"])
@@ -102,7 +146,7 @@ class ReelsPage(QWidget):
         page_row = QHBoxLayout()
         page_label = QLabel("Page:")
         page_label.setStyleSheet(f"color: {COLORS['text_secondary']}; font-size: 12px;")
-        page_label.setFixedWidth(70)
+        page_label.setFixedWidth(80)
         page_row.addWidget(page_label)
 
         self.page_combo = CyberComboBox(["-- Chon Page --"])
@@ -114,14 +158,14 @@ class ReelsPage(QWidget):
         video_row = QHBoxLayout()
         video_label = QLabel("Video:")
         video_label.setStyleSheet(f"color: {COLORS['text_secondary']}; font-size: 12px;")
-        video_label.setFixedWidth(70)
+        video_label.setFixedWidth(80)
         video_row.addWidget(video_label)
 
         self.video_input = CyberInput("Chon file video...")
         self.video_input.setReadOnly(True)
         video_row.addWidget(self.video_input, 1)
 
-        btn_browse = CyberButton("Chon", "secondary", "📂")
+        btn_browse = CyberButton("CHON", "purple", "📂")
         btn_browse.setFixedWidth(80)
         btn_browse.clicked.connect(self._browse_video)
         video_row.addWidget(btn_browse)
@@ -129,20 +173,24 @@ class ReelsPage(QWidget):
         left_layout.addLayout(video_row)
 
         # Caption
-        caption_label = QLabel("Caption:")
-        caption_label.setStyleSheet(f"color: {COLORS['text_secondary']}; font-size: 12px;")
-        left_layout.addWidget(caption_label)
+        caption_title = QLabel("📝 CAPTION")
+        caption_title.setStyleSheet(f"color: {COLORS['neon_cyan']}; font-size: 11px; font-weight: bold; letter-spacing: 1px;")
+        left_layout.addWidget(caption_title)
 
         self.caption_text = QTextEdit()
         self.caption_text.setFixedHeight(100)
         self.caption_text.setPlaceholderText("Nhap caption cho Reel...")
         self.caption_text.setStyleSheet(f"""
             QTextEdit {{
-                background: {COLORS['bg_darker']};
+                background: {COLORS['bg_card']};
                 color: {COLORS['text_primary']};
-                border: 1px solid {COLORS['border']};
-                border-radius: 8px;
-                padding: 8px;
+                border: 2px solid {COLORS['border']};
+                border-radius: 10px;
+                padding: 10px;
+                font-size: 13px;
+            }}
+            QTextEdit:focus {{
+                border-color: {COLORS['neon_cyan']};
             }}
         """)
         left_layout.addWidget(self.caption_text)
@@ -151,32 +199,40 @@ class ReelsPage(QWidget):
         hashtag_row = QHBoxLayout()
         hashtag_label = QLabel("Hashtags:")
         hashtag_label.setStyleSheet(f"color: {COLORS['text_secondary']}; font-size: 12px;")
-        hashtag_label.setFixedWidth(70)
+        hashtag_label.setFixedWidth(80)
         hashtag_row.addWidget(hashtag_label)
 
-        self.hashtag_input = CyberInput("#viral #trending")
+        self.hashtag_input = CyberInput("#viral #trending #reels")
         hashtag_row.addWidget(self.hashtag_input, 1)
 
         left_layout.addLayout(hashtag_row)
 
-        # Schedule
-        schedule_row = QHBoxLayout()
-        schedule_label = QLabel("Hen gio:")
-        schedule_label.setStyleSheet(f"color: {COLORS['text_secondary']}; font-size: 12px;")
-        schedule_label.setFixedWidth(70)
-        schedule_row.addWidget(schedule_label)
+        # Schedule section
+        schedule_title = QLabel("📅 HEN GIO")
+        schedule_title.setStyleSheet(f"color: {COLORS['neon_purple']}; font-size: 11px; font-weight: bold; letter-spacing: 1px;")
+        left_layout.addWidget(schedule_title)
 
+        schedule_row = QHBoxLayout()
         self.schedule_cb = CyberCheckBox()
         schedule_row.addWidget(self.schedule_cb)
 
-        self.schedule_datetime = QDateTimeEdit(QDateTime.currentDateTime())
+        schedule_text = QLabel("Hen gio dang")
+        schedule_text.setStyleSheet(f"color: {COLORS['text_secondary']}; font-size: 12px;")
+        schedule_row.addWidget(schedule_text)
+
+        self.schedule_datetime = QDateTimeEdit(QDateTime.currentDateTime().addSecs(3600))
+        self.schedule_datetime.setDisplayFormat("dd/MM/yyyy HH:mm")
         self.schedule_datetime.setStyleSheet(f"""
             QDateTimeEdit {{
-                background: {COLORS['bg_darker']};
+                background: {COLORS['bg_card']};
                 color: {COLORS['text_primary']};
-                border: 1px solid {COLORS['border']};
-                border-radius: 4px;
-                padding: 4px;
+                border: 2px solid {COLORS['border']};
+                border-radius: 8px;
+                padding: 6px 12px;
+                font-size: 13px;
+            }}
+            QDateTimeEdit:focus {{
+                border-color: {COLORS['neon_purple']};
             }}
         """)
         self.schedule_datetime.setEnabled(False)
@@ -191,7 +247,7 @@ class ReelsPage(QWidget):
         delay_row = QHBoxLayout()
         delay_label = QLabel("Delay (s):")
         delay_label.setStyleSheet(f"color: {COLORS['text_secondary']}; font-size: 12px;")
-        delay_label.setFixedWidth(70)
+        delay_label.setFixedWidth(80)
         delay_row.addWidget(delay_label)
 
         self.delay_min = QSpinBox()
@@ -199,17 +255,21 @@ class ReelsPage(QWidget):
         self.delay_min.setValue(30)
         self.delay_min.setStyleSheet(f"""
             QSpinBox {{
-                background: {COLORS['bg_darker']};
+                background: {COLORS['bg_card']};
                 color: {COLORS['text_primary']};
-                border: 1px solid {COLORS['border']};
-                border-radius: 4px;
-                padding: 4px;
+                border: 2px solid {COLORS['border']};
+                border-radius: 8px;
+                padding: 6px 12px;
+                font-size: 13px;
+            }}
+            QSpinBox:focus {{
+                border-color: {COLORS['neon_cyan']};
             }}
         """)
         delay_row.addWidget(self.delay_min)
 
         delay_to = QLabel("-")
-        delay_to.setStyleSheet(f"color: {COLORS['text_muted']};")
+        delay_to.setStyleSheet(f"color: {COLORS['text_muted']}; font-size: 14px;")
         delay_row.addWidget(delay_to)
 
         self.delay_max = QSpinBox()
@@ -217,11 +277,15 @@ class ReelsPage(QWidget):
         self.delay_max.setValue(60)
         self.delay_max.setStyleSheet(f"""
             QSpinBox {{
-                background: {COLORS['bg_darker']};
+                background: {COLORS['bg_card']};
                 color: {COLORS['text_primary']};
-                border: 1px solid {COLORS['border']};
-                border-radius: 4px;
-                padding: 4px;
+                border: 2px solid {COLORS['border']};
+                border-radius: 8px;
+                padding: 6px 12px;
+                font-size: 13px;
+            }}
+            QSpinBox:focus {{
+                border-color: {COLORS['neon_cyan']};
             }}
         """)
         delay_row.addWidget(self.delay_max)
@@ -229,108 +293,135 @@ class ReelsPage(QWidget):
 
         left_layout.addLayout(delay_row)
 
-        # Action buttons
-        btn_row = QHBoxLayout()
+        left_layout.addStretch()
 
-        self.btn_post = CyberButton("Dang ngay", "success", "🚀")
-        self.btn_post.clicked.connect(self._post_reel_now)
-        btn_row.addWidget(self.btn_post)
+        # Actions
+        actions_title = QLabel("🚀 HANH DONG")
+        actions_title.setStyleSheet(f"color: {COLORS['neon_mint']}; font-size: 11px; font-weight: bold; letter-spacing: 1px;")
+        left_layout.addWidget(actions_title)
 
-        self.btn_schedule = CyberButton("Hen lich", "primary", "📅")
-        self.btn_schedule.clicked.connect(self._schedule_reel)
-        btn_row.addWidget(self.btn_schedule)
+        btn_post = CyberButton("DANG NGAY", "success", "🚀")
+        btn_post.clicked.connect(self._post_reel_now)
+        left_layout.addWidget(btn_post)
 
-        left_layout.addLayout(btn_row)
+        btn_schedule = CyberButton("HEN LICH", "cyan", "📅")
+        btn_schedule.clicked.connect(self._schedule_reel)
+        left_layout.addWidget(btn_schedule)
 
         # Progress
         self.progress_label = QLabel("")
         self.progress_label.setStyleSheet(f"color: {COLORS['neon_pink']}; font-size: 11px;")
+        self.progress_label.setAlignment(Qt.AlignCenter)
         left_layout.addWidget(self.progress_label)
 
-        self.progress_bar = QProgressBar()
-        self.progress_bar.setStyleSheet(f"""
-            QProgressBar {{
-                background: {COLORS['bg_darker']};
-                border: 1px solid {COLORS['border']};
-                border-radius: 4px;
-                height: 12px;
-            }}
-            QProgressBar::chunk {{
-                background: {COLORS['neon_pink']};
-                border-radius: 3px;
-            }}
-        """)
-        left_layout.addWidget(self.progress_bar)
-
-        left_layout.addStretch()
         content.addWidget(left_card)
 
-        # Right panel - History
+        # RIGHT - History Table
         right_card = CyberCard(COLORS['neon_purple'])
         right_layout = QVBoxLayout(right_card)
-        right_layout.setContentsMargins(12, 12, 12, 12)
+        right_layout.setContentsMargins(2, 2, 2, 2)
 
         # Header
-        history_title = QLabel("📋 Lich su Reels")
-        history_title.setStyleSheet(f"color: {COLORS['text_primary']}; font-size: 14px; font-weight: bold;")
-        right_layout.addWidget(history_title)
+        header = QWidget()
+        header.setFixedHeight(50)
+        header.setStyleSheet(f"background: {COLORS['bg_darker']}; border-radius: 14px 14px 0 0;")
+        header_layout = QHBoxLayout(header)
+        header_layout.setContentsMargins(16, 0, 16, 0)
+        header_layout.setSpacing(12)
 
         # Tabs
-        tab_row = QHBoxLayout()
-
-        self.btn_scheduled = CyberButton("Da hen", "primary")
+        self.btn_scheduled = CyberButton("DA HEN", "primary", "📅")
+        self.btn_scheduled.setFixedWidth(120)
         self.btn_scheduled.clicked.connect(lambda: self._show_tab("scheduled"))
-        tab_row.addWidget(self.btn_scheduled)
+        header_layout.addWidget(self.btn_scheduled)
 
-        self.btn_posted = CyberButton("Da dang", "secondary")
+        self.btn_posted = CyberButton("DA DANG", "secondary", "🎬")
+        self.btn_posted.setFixedWidth(120)
         self.btn_posted.clicked.connect(lambda: self._show_tab("posted"))
-        tab_row.addWidget(self.btn_posted)
+        header_layout.addWidget(self.btn_posted)
 
-        tab_row.addStretch()
+        sep = QFrame()
+        sep.setFixedWidth(2)
+        sep.setFixedHeight(24)
+        sep.setStyleSheet(f"background: {COLORS['border']};")
+        header_layout.addWidget(sep)
 
-        btn_refresh = CyberButton("", "ghost", "🔄")
-        btn_refresh.setFixedWidth(36)
-        btn_refresh.clicked.connect(self._load_history)
-        tab_row.addWidget(btn_refresh)
+        header_title = QLabel("🎬 LICH SU REELS")
+        header_title.setStyleSheet(f"color: {COLORS['neon_purple']}; font-size: 12px; font-weight: bold; letter-spacing: 2px;")
+        header_layout.addWidget(header_title)
 
-        right_layout.addLayout(tab_row)
+        self.count_label = QLabel("[0]")
+        self.count_label.setStyleSheet(f"color: {COLORS['text_muted']}; font-size: 11px;")
+        header_layout.addWidget(self.count_label)
 
-        # History list
-        scroll = QScrollArea()
-        scroll.setWidgetResizable(True)
-        scroll.setStyleSheet(f"""
-            QScrollArea {{
-                background: {COLORS['bg_darker']};
-                border: 1px solid {COLORS['border']};
-                border-radius: 8px;
-            }}
-        """)
+        header_layout.addStretch()
 
-        self.history_widget = QWidget()
-        self.history_layout = QVBoxLayout(self.history_widget)
-        self.history_layout.setContentsMargins(8, 8, 8, 8)
-        self.history_layout.setSpacing(4)
+        right_layout.addWidget(header)
 
-        empty = QLabel("Chua co Reel nao")
-        empty.setStyleSheet(f"color: {COLORS['text_muted']}; font-size: 12px;")
-        empty.setAlignment(Qt.AlignCenter)
-        self.history_layout.addWidget(empty)
-        self.history_layout.addStretch()
+        # Table
+        self.table = CyberTable(["PAGE", "CAPTION", "THOI GIAN", "TRANG THAI", ""])
+        self.table.setColumnWidth(0, 150)
+        self.table.setColumnWidth(1, 200)
+        self.table.setColumnWidth(2, 150)
+        self.table.setColumnWidth(3, 100)
+        self.table.setColumnWidth(4, 60)
 
-        scroll.setWidget(self.history_widget)
-        right_layout.addWidget(scroll, 1)
-
+        right_layout.addWidget(self.table)
         content.addWidget(right_card, 1)
+
         layout.addLayout(content, 1)
 
-    def _load_data(self):
-        """Load profiles va pages"""
+    def _load_folders(self):
+        """Load folders tu Hidemium"""
+        self.log("Loading folders...", "info")
+
         def fetch():
-            profiles = get_profiles()
-            return profiles
+            try:
+                return api.get_folders(limit=100)
+            except Exception as e:
+                return []
+
+        def on_complete(folders):
+            self.folders = folders or []
+
+            self.folder_combo.clear()
+            self.folder_combo.addItem("📁 Chon folder")
+            for f in self.folders:
+                name = f.get('name', 'Unknown')
+                self.folder_combo.addItem(f"📁 {name}")
+
+            self.log(f"Loaded {len(self.folders)} folders", "success")
+            self._load_history()
+
+        def run():
+            result = fetch()
+            QTimer.singleShot(0, lambda: on_complete(result))
+
+        threading.Thread(target=run, daemon=True).start()
+
+    def _on_folder_change(self, index):
+        if index > 0:
+            self._load_profiles()
+
+    def _load_profiles(self):
+        """Load profiles tu folder"""
+        folder_idx = self.folder_combo.currentIndex()
+        if folder_idx <= 0:
+            return
+
+        folder = self.folders[folder_idx - 1]
+        folder_id = folder.get('id')
+
+        self.log(f"Loading profiles from {folder.get('name')}...", "info")
+
+        def fetch():
+            try:
+                return api.get_profiles(folder_id=[folder_id], limit=500)
+            except:
+                return []
 
         def on_complete(profiles):
-            self.profiles = profiles
+            self.profiles = profiles or []
 
             self.profile_combo.clear()
             self.profile_combo.addItem("-- Chon Profile --")
@@ -339,7 +430,6 @@ class ReelsPage(QWidget):
                 self.profile_combo.addItem(f"👤 {name}")
 
             self.stat_profiles.set_value(str(len(self.profiles)))
-            self._load_history()
             self.log(f"Loaded {len(self.profiles)} profiles", "success")
 
         def run():
@@ -354,6 +444,7 @@ class ReelsPage(QWidget):
             self.page_combo.clear()
             self.page_combo.addItem("-- Chon Page --")
             self.selected_profile_uuid = None
+            self.stat_pages.set_value("0")
             return
 
         profile = self.profiles[index - 1]
@@ -374,30 +465,55 @@ class ReelsPage(QWidget):
         """Chon file video"""
         path, _ = QFileDialog.getOpenFileName(
             self, "Chon video",
-            "", "Video Files (*.mp4 *.mov *.avi)"
+            "", "Video Files (*.mp4 *.mov *.avi *.mkv *.webm)"
         )
 
         if path:
             self.video_path = path
             self.video_input.setText(os.path.basename(path))
+            self.log(f"Selected: {os.path.basename(path)}", "info")
+
+    def _validate_inputs(self):
+        """Validate inputs"""
+        if not self.selected_profile_uuid:
+            QMessageBox.warning(self, "Loi", "Chua chon profile!")
+            return False
+
+        if self.page_combo.currentIndex() <= 0:
+            QMessageBox.warning(self, "Loi", "Chua chon page!")
+            return False
+
+        if not self.video_path:
+            QMessageBox.warning(self, "Loi", "Chua chon video!")
+            return False
+
+        if not os.path.exists(self.video_path):
+            QMessageBox.warning(self, "Loi", "File video khong ton tai!")
+            return False
+
+        return True
 
     def _post_reel_now(self):
         """Dang Reel ngay"""
         if not self._validate_inputs():
             return
 
+        if self._is_posting:
+            QMessageBox.warning(self, "Thong bao", "Dang trong qua trinh dang...")
+            return
+
+        self._is_posting = True
         self.log("Bat dau dang Reel...", "info")
         self.progress_label.setText("Dang xu ly...")
-        self.progress_bar.setMaximum(0)  # Indeterminate
+
+        page_idx = self.page_combo.currentIndex()
+        page = self.pages[page_idx - 1] if page_idx > 0 else {}
 
         def do_post():
             import time
             time.sleep(2)  # Simulate posting
 
             # Save to history
-            page_idx = self.page_combo.currentIndex()
-            page = self.pages[page_idx - 1] if page_idx > 0 else {}
-
             save_posted_reel({
                 'profile_uuid': self.selected_profile_uuid,
                 'page_id': page.get('page_id', ''),
@@ -413,13 +529,17 @@ class ReelsPage(QWidget):
         threading.Thread(target=do_post, daemon=True).start()
 
     def _on_post_complete(self, success):
-        self.progress_bar.setMaximum(100)
-        self.progress_bar.setValue(100)
+        self._is_posting = False
 
         if success:
             self.progress_label.setText("Da dang thanh cong!")
             self.log("Reel da duoc dang!", "success")
             self._load_history()
+
+            # Clear form
+            self.caption_text.clear()
+            self.video_path = ""
+            self.video_input.clear()
         else:
             self.progress_label.setText("Loi khi dang!")
             self.log("Loi dang Reel", "error")
@@ -438,6 +558,10 @@ class ReelsPage(QWidget):
 
         schedule_time = self.schedule_datetime.dateTime().toPython()
 
+        if schedule_time <= datetime.now():
+            QMessageBox.warning(self, "Loi", "Thoi gian hen phai lon hon hien tai!")
+            return
+
         save_reel_schedule({
             'profile_uuid': self.selected_profile_uuid,
             'page_id': page.get('id'),
@@ -450,111 +574,136 @@ class ReelsPage(QWidget):
             'delay_max': self.delay_max.value()
         })
 
-        self.log(f"Da hen lich dang luc {schedule_time}", "success")
+        self.log(f"Da hen lich dang luc {schedule_time.strftime('%d/%m/%Y %H:%M')}", "success")
+        self.progress_label.setText(f"Hen luc {schedule_time.strftime('%H:%M %d/%m')}")
+
+        # Clear form
+        self.caption_text.clear()
+        self.video_path = ""
+        self.video_input.clear()
+        self.schedule_cb.setChecked(False)
+
         self._load_history()
-
-    def _validate_inputs(self):
-        """Validate inputs"""
-        if not self.selected_profile_uuid:
-            QMessageBox.warning(self, "Loi", "Chua chon profile!")
-            return False
-
-        if self.page_combo.currentIndex() <= 0:
-            QMessageBox.warning(self, "Loi", "Chua chon page!")
-            return False
-
-        if not self.video_path:
-            QMessageBox.warning(self, "Loi", "Chua chon video!")
-            return False
-
-        return True
 
     def _load_history(self):
         """Load lich su Reels"""
         self.schedules = get_reel_schedules(status='pending')
         self.posted_reels = get_posted_reels(limit=50)
+
+        self.stat_scheduled.set_value(str(len(self.schedules)))
         self.stat_posted.set_value(str(len(self.posted_reels)))
+
         self._show_tab("scheduled")
 
     def _show_tab(self, tab: str):
         """Hien thi tab"""
-        # Clear
-        while self.history_layout.count() > 0:
-            item = self.history_layout.takeAt(0)
-            if item.widget():
-                item.widget().deleteLater()
+        self.table.setRowCount(0)
 
         if tab == "scheduled":
-            self.btn_scheduled.setStyleSheet(f"background: {COLORS['neon_purple']};")
-            self.btn_posted.setStyleSheet(f"background: {COLORS['bg_card']};")
+            self.btn_scheduled.setStyleSheet(f"""
+                QPushButton {{
+                    background: {COLORS['neon_purple']};
+                    border: 2px solid {COLORS['neon_purple']};
+                    color: {COLORS['bg_dark']};
+                    border-radius: 8px;
+                    padding: 8px 16px;
+                    font-weight: bold;
+                }}
+            """)
+            self.btn_posted.setStyleSheet(f"""
+                QPushButton {{
+                    background: transparent;
+                    border: 2px solid {COLORS['border']};
+                    color: {COLORS['text_secondary']};
+                    border-radius: 8px;
+                    padding: 8px 16px;
+                }}
+            """)
             items = self.schedules
+            self.count_label.setText(f"[{len(items)} hen]")
         else:
-            self.btn_scheduled.setStyleSheet(f"background: {COLORS['bg_card']};")
-            self.btn_posted.setStyleSheet(f"background: {COLORS['neon_purple']};")
+            self.btn_scheduled.setStyleSheet(f"""
+                QPushButton {{
+                    background: transparent;
+                    border: 2px solid {COLORS['border']};
+                    color: {COLORS['text_secondary']};
+                    border-radius: 8px;
+                    padding: 8px 16px;
+                }}
+            """)
+            self.btn_posted.setStyleSheet(f"""
+                QPushButton {{
+                    background: {COLORS['neon_mint']};
+                    border: 2px solid {COLORS['neon_mint']};
+                    color: {COLORS['bg_dark']};
+                    border-radius: 8px;
+                    padding: 8px 16px;
+                    font-weight: bold;
+                }}
+            """)
             items = self.posted_reels
+            self.count_label.setText(f"[{len(items)} da dang]")
 
-        if not items:
-            label = QLabel(f"Chua co Reel nao {'da hen' if tab == 'scheduled' else 'da dang'}")
-            label.setStyleSheet(f"color: {COLORS['text_muted']}; font-size: 12px;")
-            label.setAlignment(Qt.AlignCenter)
-            self.history_layout.addWidget(label)
-        else:
-            for item in items[:20]:
-                row = self._create_history_row(item, tab)
-                self.history_layout.addWidget(row)
+        self.table.setRowCount(len(items))
 
-        self.history_layout.addStretch()
+        for row, item in enumerate(items):
+            # Page name
+            page_name = item.get('page_name', 'Unknown')[:20]
+            self.table.setItem(row, 0, QTableWidgetItem(f"📄 {page_name}"))
 
-    def _create_history_row(self, item: Dict, tab: str):
-        """Tao row cho history"""
-        row = QWidget()
-        row.setStyleSheet(f"background: {COLORS['bg_card']}; border-radius: 4px;")
-        row.setFixedHeight(50)
+            # Caption
+            caption = item.get('caption', '')[:30]
+            if len(item.get('caption', '')) > 30:
+                caption += "..."
+            self.table.setItem(row, 1, QTableWidgetItem(caption))
 
-        row_layout = QHBoxLayout(row)
-        row_layout.setContentsMargins(8, 4, 8, 4)
-        row_layout.setSpacing(8)
+            # Time
+            if tab == "scheduled":
+                time_str = item.get('scheduled_time', '')[:16].replace('T', ' ')
+            else:
+                time_str = item.get('posted_at', '')[:16].replace('T', ' ')
+            self.table.setItem(row, 2, QTableWidgetItem(time_str))
 
-        # Icon
-        icon = "📅" if tab == "scheduled" else ("✅" if item.get('status') == 'success' else "❌")
-        icon_label = QLabel(icon)
-        icon_label.setStyleSheet(f"font-size: 16px;")
-        row_layout.addWidget(icon_label)
+            # Status
+            if tab == "scheduled":
+                status_text = "📅 Cho dang"
+            else:
+                status = item.get('status', '')
+                if status == 'success':
+                    status_text = "✅ Thanh cong"
+                else:
+                    status_text = "❌ Loi"
+            self.table.setItem(row, 3, QTableWidgetItem(status_text))
 
-        # Info
-        info_widget = QWidget()
-        info_layout = QVBoxLayout(info_widget)
-        info_layout.setContentsMargins(0, 0, 0, 0)
-        info_layout.setSpacing(0)
+            # Action button
+            if tab == "scheduled":
+                action_widget = QWidget()
+                action_widget.setStyleSheet("background: transparent;")
+                action_layout = QHBoxLayout(action_widget)
+                action_layout.setContentsMargins(0, 0, 0, 0)
+                action_layout.setAlignment(Qt.AlignCenter)
 
-        page_name = item.get('page_name', 'Unknown')
-        name_label = QLabel(page_name[:30])
-        name_label.setStyleSheet(f"color: {COLORS['text_primary']}; font-size: 11px;")
-        info_layout.addWidget(name_label)
+                btn_del = CyberButton("", "danger", "🗑️")
+                btn_del.setFixedSize(32, 32)
+                item_id = item.get('id')
+                btn_del.clicked.connect(lambda checked, sid=item_id: self._delete_schedule(sid))
+                action_layout.addWidget(btn_del)
 
-        if tab == "scheduled":
-            time_str = item.get('scheduled_time', '')[:16]
-        else:
-            time_str = item.get('posted_at', '')[:16]
-
-        time_label = QLabel(time_str)
-        time_label.setStyleSheet(f"color: {COLORS['text_muted']}; font-size: 10px;")
-        info_layout.addWidget(time_label)
-
-        row_layout.addWidget(info_widget, 1)
-
-        # Delete button (for scheduled only)
-        if tab == "scheduled":
-            btn_del = CyberButton("", "danger", "🗑️")
-            btn_del.setFixedSize(28, 28)
-            btn_del.clicked.connect(lambda: self._delete_schedule(item.get('id')))
-            row_layout.addWidget(btn_del)
-
-        return row
+                self.table.setCellWidget(row, 4, action_widget)
+            else:
+                self.table.setItem(row, 4, QTableWidgetItem(""))
 
     def _delete_schedule(self, schedule_id):
         """Xoa schedule"""
         if schedule_id:
-            delete_reel_schedule(schedule_id)
-            self.log("Da xoa lich hen", "success")
-            self._load_history()
+            reply = QMessageBox.question(
+                self, "Xac nhan",
+                "Ban co chac muon xoa lich hen nay?",
+                QMessageBox.Yes | QMessageBox.No,
+                QMessageBox.No
+            )
+
+            if reply == QMessageBox.Yes:
+                delete_reel_schedule(schedule_id)
+                self.log("Da xoa lich hen", "success")
+                self._load_history()
