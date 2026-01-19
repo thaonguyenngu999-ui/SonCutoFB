@@ -1,14 +1,15 @@
 """
 FB Manager Pro - Main Application
-🐱 CUTE CAT Edition - BEAUTIFUL 🐱
+🐱 CUTE CAT Edition - WITH REAL HIDEMIUM API 🐱
 """
 
 import sys
+import threading
 from PySide6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
-    QFrame, QLabel, QStackedWidget, QTableWidgetItem
+    QFrame, QLabel, QStackedWidget, QTableWidgetItem, QMessageBox
 )
-from PySide6.QtCore import Qt, QTimer
+from PySide6.QtCore import Qt, QTimer, Signal, QObject
 from PySide6.QtGui import QColor, QPainter, QPen, QBrush, QLinearGradient
 
 from config import COLORS, MENU_ITEMS, CYBERPUNK_QSS
@@ -17,6 +18,10 @@ from widgets import (
     CyberTitle, NavItem, CyberTerminal, CyberTable, CyberCheckBox,
     ScanlineOverlay, NeonRain, CyberGrid, PulsingDot, GlitchText, NeonFlash
 )
+
+# Import API và Database
+from api_service import api
+from database import sync_profiles, get_profiles as db_get_profiles, update_profile_local
 
 
 class Sidebar(QWidget):
@@ -94,7 +99,7 @@ class Sidebar(QWidget):
         self.conn_dot = PulsingDot(COLORS['text_muted'])
         conn_layout.addWidget(self.conn_dot)
         
-        self.conn_text = QLabel("OFFLINE")
+        self.conn_text = QLabel("CHECKING...")
         self.conn_text.setStyleSheet(f"color: {COLORS['text_muted']}; font-size: 10px;")
         conn_layout.addWidget(self.conn_text)
         conn_layout.addStretch()
@@ -124,12 +129,28 @@ class Sidebar(QWidget):
 
 
 class ProfilesPage(QWidget):
-    """Profiles - BEAUTIFUL TABLE 🐱"""
+    """Profiles - WITH REAL HIDEMIUM API 🐱"""
     
     def __init__(self, log_func, parent=None):
         super().__init__(parent)
         self.log = log_func
+        self.profiles = []
+        self.folders = []
+        self.folder_map = {}
+        self.running_uuids = set()
+        self.toggle_buttons = {}
         
+        self._setup_ui()
+        
+        # Auto refresh timer
+        self.refresh_timer = QTimer(self)
+        self.refresh_timer.timeout.connect(self._auto_refresh_status)
+        self.refresh_timer.start(5000)
+        
+        # Initial load
+        QTimer.singleShot(500, self._load_data)
+    
+    def _setup_ui(self):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(16, 12, 16, 12)
         layout.setSpacing(10)
@@ -138,7 +159,7 @@ class ProfilesPage(QWidget):
         top_bar = QHBoxLayout()
         top_bar.setSpacing(12)
         
-        title = CyberTitle("Profiles", "Hidemium", "pink")
+        title = CyberTitle("Profiles", "Hidemium Browser", "pink")
         top_bar.addWidget(title)
         
         top_bar.addStretch()
@@ -161,22 +182,25 @@ class ProfilesPage(QWidget):
         toolbar = QHBoxLayout()
         toolbar.setSpacing(8)
         
-        search = CyberInput("🔍 Tìm kiếm...")
-        search.setFixedWidth(200)
-        toolbar.addWidget(search)
+        self.search_input = CyberInput("🔍 Tìm kiếm...")
+        self.search_input.setFixedWidth(200)
+        self.search_input.textChanged.connect(self._filter_profiles)
+        toolbar.addWidget(self.search_input)
         
-        folder_combo = CyberComboBox(["📁 Tất cả", "📁 Marketing", "📁 Sales", "📁 Support"])
-        folder_combo.setFixedWidth(140)
-        toolbar.addWidget(folder_combo)
+        self.folder_combo = CyberComboBox(["📁 Tất cả"])
+        self.folder_combo.setFixedWidth(160)
+        self.folder_combo.currentIndexChanged.connect(self._filter_profiles)
+        toolbar.addWidget(self.folder_combo)
         
         toolbar.addStretch()
         
         btn_refresh = CyberButton("⟳", "ghost")
         btn_refresh.setFixedWidth(40)
+        btn_refresh.clicked.connect(self._refresh_status)
         toolbar.addWidget(btn_refresh)
         
         btn_sync = CyberButton("SYNC", "cyan", "🔄")
-        btn_sync.clicked.connect(lambda: self.log("Syncing...", "info"))
+        btn_sync.clicked.connect(self._sync_profiles)
         toolbar.addWidget(btn_sync)
         
         layout.addLayout(toolbar)
@@ -186,7 +210,7 @@ class ProfilesPage(QWidget):
         table_layout = QVBoxLayout(table_card)
         table_layout.setContentsMargins(2, 2, 2, 2)
         
-        # Header với Select All
+        # Header
         header = QWidget()
         header.setFixedHeight(44)
         header.setStyleSheet(f"background: {COLORS['bg_darker']}; border-radius: 14px 14px 0 0;")
@@ -194,7 +218,7 @@ class ProfilesPage(QWidget):
         header_layout.setContentsMargins(16, 0, 16, 0)
         header_layout.setSpacing(12)
         
-        # Select All checkbox với label
+        # Select All
         select_all_widget = QWidget()
         select_all_layout = QHBoxLayout(select_all_widget)
         select_all_layout.setContentsMargins(0, 0, 0, 0)
@@ -212,7 +236,6 @@ class ProfilesPage(QWidget):
         
         header_layout.addWidget(select_all_widget)
         
-        # Separator
         sep = QFrame()
         sep.setFixedWidth(2)
         sep.setFixedHeight(24)
@@ -229,26 +252,241 @@ class ProfilesPage(QWidget):
         
         header_layout.addStretch()
         
-        # Selected count
         self.selected_label = QLabel("")
         self.selected_label.setStyleSheet(f"color: {COLORS['neon_cyan']}; font-size: 11px;")
         header_layout.addWidget(self.selected_label)
         
         table_layout.addWidget(header)
         
-        # Table - checkbox, ID, NAME, FOLDER, ACTION (toggle)
+        # Table
         self.table = CyberTable(["✓", "ID", "NAME", "FOLDER", "ACTION"])
         self.table.setColumnWidth(0, 50)
         self.table.setColumnWidth(1, 100)
         self.table.setColumnWidth(2, 300)
         self.table.setColumnWidth(3, 150)
-        self.table.setColumnWidth(4, 120)  # ACTION column fixed width
+        self.table.setColumnWidth(4, 120)
         
         table_layout.addWidget(self.table)
-        
         layout.addWidget(table_card, 1)
+    
+    def _load_data(self):
+        """Load profiles và folders từ Hidemium"""
+        self.log("Loading from Hidemium...", "info")
         
-        QTimer.singleShot(300, self._load_sample_data)
+        def fetch():
+            try:
+                folders = api.get_folders(limit=100)
+                profiles = api.get_profiles(limit=500)
+                running = api.get_running_profiles()
+                return {"folders": folders, "profiles": profiles, "running": running}
+            except Exception as e:
+                return {"error": str(e)}
+        
+        def on_complete(result):
+            if "error" in result:
+                self.log(f"Error: {result['error']}", "error")
+                return
+            
+            self.folders = result.get("folders", [])
+            self.folder_map = {f.get('id'): f.get('name', 'Unknown') for f in self.folders}
+            
+            self.folder_combo.clear()
+            self.folder_combo.addItem("📁 Tất cả")
+            for folder in self.folders:
+                self.folder_combo.addItem(f"📁 {folder.get('name', 'Unknown')}")
+            
+            self.profiles = result.get("profiles", [])
+            self.running_uuids = set(result.get("running", []))
+            
+            sync_profiles(self.profiles)
+            self._update_table()
+            self._update_stats()
+            
+            self.log(f"Loaded {len(self.profiles)} profiles", "success")
+        
+        def run_thread():
+            result = fetch()
+            QTimer.singleShot(0, lambda: on_complete(result))
+        
+        threading.Thread(target=run_thread, daemon=True).start()
+    
+    def _update_table(self, filtered_profiles=None):
+        """Update table với profiles"""
+        from widgets.cyber_widgets import ToggleButton, CyberCheckBox
+        
+        profiles_to_show = filtered_profiles if filtered_profiles is not None else self.profiles
+        
+        self.table.setRowCount(len(profiles_to_show))
+        self.toggle_buttons.clear()
+        
+        for row, profile in enumerate(profiles_to_show):
+            uuid = profile.get('uuid', '')
+            name = profile.get('name', 'Unknown')
+            folder_id = profile.get('folder_id')
+            folder_name = self.folder_map.get(folder_id, '-')
+            is_running = uuid in self.running_uuids
+            
+            # Checkbox
+            checkbox_widget = QWidget()
+            checkbox_widget.setStyleSheet("background: transparent;")
+            checkbox_layout = QHBoxLayout(checkbox_widget)
+            checkbox_layout.setContentsMargins(0, 0, 0, 0)
+            checkbox_layout.setAlignment(Qt.AlignCenter)
+            checkbox = CyberCheckBox()
+            checkbox_layout.addWidget(checkbox)
+            self.table.setCellWidget(row, 0, checkbox_widget)
+            
+            # UUID
+            self.table.setItem(row, 1, QTableWidgetItem(uuid[:8] if uuid else '-'))
+            
+            # Name
+            self.table.setItem(row, 2, QTableWidgetItem(name))
+            
+            # Folder
+            self.table.setItem(row, 3, QTableWidgetItem(folder_name))
+            
+            # Toggle button
+            action_widget = QWidget()
+            action_widget.setStyleSheet("background: transparent;")
+            action_layout = QHBoxLayout(action_widget)
+            action_layout.setContentsMargins(0, 0, 0, 0)
+            action_layout.setAlignment(Qt.AlignCenter)
+            
+            toggle_btn = ToggleButton()
+            toggle_btn.set_running(is_running)
+            toggle_btn.toggled_state.connect(lambda running, u=uuid: self._on_toggle_profile(u, running))
+            action_layout.addWidget(toggle_btn)
+            
+            self.table.setCellWidget(row, 4, action_widget)
+            self.toggle_buttons[uuid] = toggle_btn
+        
+        self.count_label.setText(f"[{len(profiles_to_show)} profiles]")
+    
+    def _on_toggle_profile(self, uuid: str, should_run: bool):
+        if should_run:
+            self._start_profile(uuid)
+        else:
+            self._stop_profile(uuid)
+    
+    def _start_profile(self, uuid: str):
+        self.log(f"Starting {uuid[:8]}...", "info")
+        
+        def do_start():
+            try:
+                return api.open_browser(uuid)
+            except Exception as e:
+                return {"error": str(e)}
+        
+        def on_complete(result):
+            if "error" in result or result.get("type") == "error":
+                self.log(f"Failed: {result.get('title', result.get('error', 'Unknown'))}", "error")
+                if uuid in self.toggle_buttons:
+                    self.toggle_buttons[uuid].set_running(False)
+            else:
+                self.log(f"Started {uuid[:8]} 😸", "success")
+                self.running_uuids.add(uuid)
+                self._update_stats()
+        
+        def run():
+            result = do_start()
+            QTimer.singleShot(0, lambda: on_complete(result))
+        
+        threading.Thread(target=run, daemon=True).start()
+    
+    def _stop_profile(self, uuid: str):
+        self.log(f"Stopping {uuid[:8]}...", "info")
+        
+        def do_stop():
+            try:
+                return api.close_browser(uuid)
+            except Exception as e:
+                return {"error": str(e)}
+        
+        def on_complete(result):
+            if "error" in result or result.get("type") == "error":
+                self.log(f"Failed: {result.get('title', result.get('error', 'Unknown'))}", "error")
+                if uuid in self.toggle_buttons:
+                    self.toggle_buttons[uuid].set_running(True)
+            else:
+                self.log(f"Stopped {uuid[:8]}", "success")
+                self.running_uuids.discard(uuid)
+                self._update_stats()
+        
+        def run():
+            result = do_stop()
+            QTimer.singleShot(0, lambda: on_complete(result))
+        
+        threading.Thread(target=run, daemon=True).start()
+    
+    def _sync_profiles(self):
+        self.log("Syncing...", "info")
+        self._load_data()
+    
+    def _refresh_status(self):
+        self.log("Refreshing...", "info")
+        
+        def fetch():
+            try:
+                return api.get_running_profiles()
+            except:
+                return []
+        
+        def on_complete(running):
+            self.running_uuids = set(running)
+            for uuid, btn in self.toggle_buttons.items():
+                btn.set_running(uuid in self.running_uuids)
+            self._update_stats()
+            self.log(f"{len(running)} running", "success")
+        
+        def run():
+            result = fetch()
+            QTimer.singleShot(0, lambda: on_complete(result))
+        
+        threading.Thread(target=run, daemon=True).start()
+    
+    def _auto_refresh_status(self):
+        def fetch():
+            try:
+                return api.get_running_profiles()
+            except:
+                return []
+        
+        def on_complete(running):
+            old = self.running_uuids.copy()
+            self.running_uuids = set(running)
+            if old != self.running_uuids:
+                for uuid, btn in self.toggle_buttons.items():
+                    btn.set_running(uuid in self.running_uuids)
+                self._update_stats()
+        
+        def run():
+            result = fetch()
+            QTimer.singleShot(0, lambda: on_complete(result))
+        
+        threading.Thread(target=run, daemon=True).start()
+    
+    def _filter_profiles(self):
+        search = self.search_input.text().lower()
+        folder_idx = self.folder_combo.currentIndex()
+        
+        filtered = []
+        for profile in self.profiles:
+            name = profile.get('name', '').lower()
+            uuid = profile.get('uuid', '').lower()
+            
+            if search and search not in name and search not in uuid:
+                continue
+            
+            if folder_idx > 0:
+                folder_id = profile.get('folder_id')
+                if folder_idx <= len(self.folders):
+                    selected = self.folders[folder_idx - 1]
+                    if folder_id != selected.get('id'):
+                        continue
+            
+            filtered.append(profile)
+        
+        self._update_table(filtered)
     
     def _toggle_select_all(self, state):
         checked = state == Qt.Checked
@@ -261,43 +499,15 @@ class ProfilesPage(QWidget):
                     cb.setChecked(checked)
                     if checked:
                         count += 1
-        
-        if checked:
-            self.selected_label.setText(f"✓ {count} đã chọn")
-        else:
-            self.selected_label.setText("")
+        self.selected_label.setText(f"✓ {count} đã chọn" if checked else "")
     
-    def _load_sample_data(self):
-        self.stat_total.set_value("247")
-        self.stat_running.set_value("18")
-        self.stat_folders.set_value("12")
-        self.count_label.setText("[247 profiles]")
-        
-        sample_data = [
-            ["PRF001", "Account_Marketing_01", "Marketing"],
-            ["PRF002", "Account_Sales_02", "Sales"],
-            ["PRF003", "Account_Support_03", "Support"],
-            ["PRF004", "Account_Dev_04", "Dev"],
-            ["PRF005", "Account_Marketing_05", "Marketing"],
-            ["PRF006", "Account_HR_06", "HR"],
-            ["PRF007", "Account_Finance_07", "Finance"],
-            ["PRF008", "Account_Marketing_08", "Marketing"],
-            ["PRF009", "Account_Sales_09", "Sales"],
-            ["PRF010", "Account_Admin_10", "Admin"],
-            ["PRF011", "Account_Marketing_11", "Marketing"],
-            ["PRF012", "Account_Support_12", "Support"],
-        ]
-        
-        self.table.setRowCount(len(sample_data))
-        for row, data in enumerate(sample_data):
-            self.table.add_row_with_widgets(data, row)
-        
-        self.log("Loaded 247 profiles", "success")
+    def _update_stats(self):
+        self.stat_total.set_value(str(len(self.profiles)))
+        self.stat_running.set_value(str(len(self.running_uuids)))
+        self.stat_folders.set_value(str(len(self.folders)))
 
 
 class LogPanel(QWidget):
-    """Log panel 🐱"""
-    
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setFixedWidth(280)
@@ -345,8 +555,6 @@ class LogPanel(QWidget):
 
 
 class StatusBar(QWidget):
-    """Status bar 🐱"""
-    
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setFixedHeight(32)
@@ -354,18 +562,28 @@ class StatusBar(QWidget):
         layout = QHBoxLayout(self)
         layout.setContentsMargins(16, 0, 16, 0)
         
-        dot = PulsingDot(COLORS['neon_mint'])
-        layout.addWidget(dot)
+        self.dot = PulsingDot(COLORS['neon_mint'])
+        layout.addWidget(self.dot)
         
-        status = QLabel("ONLINE")
-        status.setStyleSheet(f"color: {COLORS['neon_mint']}; font-size: 10px; font-weight: bold;")
-        layout.addWidget(status)
+        self.status = QLabel("CHECKING...")
+        self.status.setStyleSheet(f"color: {COLORS['text_muted']}; font-size: 10px; font-weight: bold;")
+        layout.addWidget(self.status)
         
         layout.addStretch()
         
         version = QLabel("🐱 CUTE CAT v2.0.77")
         version.setStyleSheet(f"color: {COLORS['text_muted']}; font-size: 10px;")
         layout.addWidget(version)
+    
+    def set_online(self, online: bool):
+        if online:
+            self.dot.color = QColor(COLORS['neon_mint'])
+            self.status.setText("HIDEMIUM ONLINE")
+            self.status.setStyleSheet(f"color: {COLORS['neon_mint']}; font-size: 10px; font-weight: bold;")
+        else:
+            self.dot.color = QColor(COLORS['neon_coral'])
+            self.status.setText("HIDEMIUM OFFLINE")
+            self.status.setStyleSheet(f"color: {COLORS['neon_coral']}; font-size: 10px; font-weight: bold;")
     
     def paintEvent(self, event):
         painter = QPainter(self)
@@ -381,8 +599,6 @@ class StatusBar(QWidget):
 
 
 class MainWindow(QMainWindow):
-    """Main window 🐱"""
-    
     def __init__(self):
         super().__init__()
         
@@ -495,8 +711,23 @@ class MainWindow(QMainWindow):
         self.log(f"→ {tab_id.upper()}", "info")
     
     def _check_connection(self):
-        self.sidebar.set_connection(False)
-        self.log("Hidemium offline", "warning")
+        def check():
+            return api.check_connection()
+        
+        def on_complete(connected):
+            self.sidebar.set_connection(connected)
+            self.status_bar.set_online(connected)
+            
+            if connected:
+                self.log("Hidemium connected! 😸", "success")
+            else:
+                self.log("Hidemium offline 😿", "warning")
+        
+        def run():
+            result = check()
+            QTimer.singleShot(0, lambda: on_complete(result))
+        
+        threading.Thread(target=run, daemon=True).start()
     
     def log(self, message: str, level: str = "info"):
         self.log_panel.add_line(message, level)
