@@ -1,6 +1,6 @@
 """
 FB Manager Pro - Main Application
-PySide6 with Cyberpunk 2077 Theme - BRIGHT EDITION
+PySide6 with Cyberpunk 2077 Theme - FIXED VERSION
 """
 
 import sys
@@ -26,15 +26,12 @@ class Sidebar(QFrame):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setObjectName("sidebar")
-        self.setFixedWidth(230)
+        self.setFixedWidth(220)
         
         self.setStyleSheet(f"""
             QFrame#sidebar {{
-                background: qlineargradient(y1:0, y2:1, stop:0 #12142a, stop:1 #0d0f20);
-                border-right: 2px solid qlineargradient(y1:0, y2:1, 
-                    stop:0 {COLORS['neon_cyan']}, 
-                    stop:0.5 {COLORS['neon_magenta']}, 
-                    stop:1 {COLORS['neon_cyan']});
+                background: qlineargradient(y1:0, y2:1, stop:0 #0d0f20, stop:1 #080a15);
+                border-right: 2px solid {COLORS['neon_cyan']};
             }}
         """)
         
@@ -45,21 +42,21 @@ class Sidebar(QFrame):
         # Logo section
         logo_section = QWidget()
         logo_layout = QHBoxLayout(logo_section)
-        logo_layout.setContentsMargins(14, 18, 14, 18)
+        logo_layout.setContentsMargins(12, 16, 12, 16)
         
         # Logo box
         logo_box = QFrame()
-        logo_box.setFixedSize(44, 44)
+        logo_box.setFixedSize(40, 40)
         logo_box.setStyleSheet(f"""
             background: {COLORS['neon_cyan']};
-            border-radius: 10px;
+            border-radius: 4px;
         """)
         logo_box_layout = QVBoxLayout(logo_box)
         logo_box_layout.setAlignment(Qt.AlignCenter)
         logo_text = QLabel("SC")
         logo_text.setStyleSheet(f"""
             color: {COLORS['bg_dark']};
-            font-size: 16px;
+            font-size: 14px;
             font-weight: bold;
         """)
         logo_text.setAlignment(Qt.AlignCenter)
@@ -70,14 +67,13 @@ class Sidebar(QFrame):
         title_widget = QWidget()
         title_layout = QVBoxLayout(title_widget)
         title_layout.setContentsMargins(10, 0, 0, 0)
-        title_layout.setSpacing(2)
+        title_layout.setSpacing(0)
         
         main_title = QLabel("SonCuto")
         main_title.setStyleSheet(f"""
             color: {COLORS['text_primary']};
             font-size: 13px;
             font-weight: bold;
-            letter-spacing: 1px;
         """)
         title_layout.addWidget(main_title)
         
@@ -85,7 +81,7 @@ class Sidebar(QFrame):
         sub_title.setStyleSheet(f"""
             color: {COLORS['neon_cyan']};
             font-size: 8px;
-            letter-spacing: 2px;
+            letter-spacing: 1px;
         """)
         title_layout.addWidget(sub_title)
         
@@ -96,20 +92,16 @@ class Sidebar(QFrame):
         # Divider
         divider = QFrame()
         divider.setFixedHeight(2)
-        divider.setStyleSheet(f"""
-            background: qlineargradient(x1:0, x2:1, 
-                stop:0 transparent, stop:0.5 {COLORS['neon_cyan']}, stop:1 transparent);
-            margin: 0 14px;
-        """)
+        divider.setStyleSheet(f"background: {COLORS['neon_cyan']}; margin: 0 12px;")
         layout.addWidget(divider)
         
         # Menu label
-        menu_label = QLabel("◢ MAIN MENU")
+        menu_label = QLabel("MAIN MENU")
         menu_label.setStyleSheet(f"""
-            color: {COLORS['neon_cyan']};
+            color: {COLORS['text_muted']};
             font-size: 9px;
-            letter-spacing: 3px;
-            padding: 14px 18px 8px 18px;
+            letter-spacing: 2px;
+            padding: 12px 16px 6px 16px;
         """)
         layout.addWidget(menu_label)
         
@@ -117,7 +109,7 @@ class Sidebar(QFrame):
         self.nav_items = {}
         nav_container = QWidget()
         nav_layout = QVBoxLayout(nav_container)
-        nav_layout.setContentsMargins(8, 0, 8, 0)
+        nav_layout.setContentsMargins(6, 0, 6, 0)
         nav_layout.setSpacing(2)
         
         for item in MENU_ITEMS:
@@ -131,15 +123,14 @@ class Sidebar(QFrame):
         # Bottom section
         bottom = QWidget()
         bottom_layout = QVBoxLayout(bottom)
-        bottom_layout.setContentsMargins(12, 0, 12, 14)
+        bottom_layout.setContentsMargins(10, 0, 10, 12)
         
         # Connection status
         conn_frame = QFrame()
         conn_frame.setStyleSheet(f"""
-            background: {COLORS['bg_hover']};
+            background: {COLORS['bg_card']};
             border: 1px solid {COLORS['border']};
-            border-radius: 8px;
-            padding: 8px;
+            border-radius: 4px;
         """)
         conn_layout = QHBoxLayout(conn_frame)
         conn_layout.setContentsMargins(10, 8, 10, 8)
@@ -158,16 +149,12 @@ class Sidebar(QFrame):
         
         bottom_layout.addWidget(conn_frame)
         
-        # Settings
-        settings_btn = NavItem("Settings", "⚙️", "settings", "cyan")
-        bottom_layout.addWidget(settings_btn)
-        
         # Version
-        version = QLabel("v2.0.77 // CYBERPUNK")
+        version = QLabel("v2.0.77")
         version.setStyleSheet(f"""
             color: {COLORS['text_muted']};
-            font-size: 8px;
-            letter-spacing: 1px;
+            font-size: 9px;
+            margin-top: 8px;
         """)
         version.setAlignment(Qt.AlignCenter)
         bottom_layout.addWidget(version)
@@ -177,24 +164,24 @@ class Sidebar(QFrame):
     def set_connection(self, connected: bool):
         if connected:
             self.conn_dot.color = QColor(COLORS['neon_green'])
-            self.conn_text.setText("HIDEMIUM ONLINE")
+            self.conn_text.setText("HIDEMIUM OK")
             self.conn_text.setStyleSheet(f"color: {COLORS['neon_green']}; font-size: 9px;")
         else:
             self.conn_dot.color = QColor(COLORS['neon_red'])
-            self.conn_text.setText("HIDEMIUM OFFLINE")
+            self.conn_text.setText("OFFLINE")
             self.conn_text.setStyleSheet(f"color: {COLORS['neon_red']}; font-size: 9px;")
 
 
 class ProfilesPage(QWidget):
-    """Profiles tab content"""
+    """Profiles tab content - IMPROVED UX"""
     
     def __init__(self, log_func, parent=None):
         super().__init__(parent)
         self.log = log_func
         
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(24, 24, 24, 24)
-        layout.setSpacing(18)
+        layout.setContentsMargins(20, 20, 20, 20)
+        layout.setSpacing(16)
         
         # Title
         title = CyberTitle("Profiles", "Quản lý tài khoản Hidemium Browser", "cyan")
@@ -202,7 +189,7 @@ class ProfilesPage(QWidget):
         
         # Stats row
         stats_layout = QHBoxLayout()
-        stats_layout.setSpacing(14)
+        stats_layout.setSpacing(12)
         
         self.stat_total = CyberStatCard("TỔNG PROFILES", "0", "▲ +0 tuần này", "cyan")
         self.stat_running = CyberStatCard("ĐANG CHẠY", "0", "● Active", "green")
@@ -220,11 +207,11 @@ class ProfilesPage(QWidget):
         toolbar = QHBoxLayout()
         toolbar.setSpacing(10)
         
-        search = CyberInput("🔍 SEARCH...")
-        search.setFixedWidth(260)
+        search = CyberInput("🔍 Tìm kiếm...")
+        search.setFixedWidth(240)
         toolbar.addWidget(search)
         
-        folder_combo = CyberComboBox(["ALL FOLDERS"])
+        folder_combo = CyberComboBox(["Tất cả thư mục"])
         toolbar.addWidget(folder_combo)
         
         toolbar.addStretch()
@@ -242,28 +229,23 @@ class ProfilesPage(QWidget):
         layout.addLayout(toolbar)
         
         # Table card
-        card = CyberCard()
+        card = CyberCard(COLORS['neon_cyan'])
         card_layout = QVBoxLayout(card)
         card_layout.setContentsMargins(0, 0, 0, 0)
         
         # Card header
         header = QFrame()
         header.setStyleSheet(f"""
-            background: rgba(0, 240, 255, 0.05);
-            border-bottom: 2px solid {COLORS['border']};
-            border-radius: 12px 12px 0 0;
+            background: {COLORS['bg_darker']};
+            border-bottom: 2px solid {COLORS['neon_cyan']};
+            border-radius: 4px 4px 0 0;
         """)
         header_layout = QHBoxLayout(header)
-        header_layout.setContentsMargins(18, 14, 18, 14)
+        header_layout.setContentsMargins(16, 12, 16, 12)
         
-        bar = QFrame()
-        bar.setFixedSize(4, 22)
-        bar.setStyleSheet(f"background: {COLORS['neon_cyan']}; border-radius: 2px;")
-        header_layout.addWidget(bar)
-        
-        header_title = QLabel("PROFILE DATABASE")
+        header_title = QLabel("◢ PROFILE DATABASE")
         header_title.setStyleSheet(f"""
-            color: {COLORS['text_primary']};
+            color: {COLORS['neon_cyan']};
             font-size: 11px;
             font-weight: bold;
             letter-spacing: 2px;
@@ -271,7 +253,7 @@ class ProfilesPage(QWidget):
         header_layout.addWidget(header_title)
         
         self.count_label = QLabel("[0]")
-        self.count_label.setStyleSheet(f"color: {COLORS['neon_cyan']}; font-size: 11px; font-weight: bold;")
+        self.count_label.setStyleSheet(f"color: {COLORS['text_muted']}; font-size: 11px;")
         header_layout.addWidget(self.count_label)
         
         header_layout.addStretch()
@@ -291,19 +273,19 @@ class ProfilesPage(QWidget):
         self.stat_running.set_value("18")
         self.stat_folders.set_value("12")
         self.stat_scripts.set_value("34")
-        self.count_label.setText("[247]")
+        self.count_label.setText("[247 profiles]")
         self.log("Loaded 247 profiles", "success")
 
 
 class LogPanel(QFrame):
-    """Log panel bên phải"""
+    """Log panel bên phải - KHÔNG CÓ EFFECTS"""
     
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setFixedWidth(340)
+        self.setFixedWidth(320)
         self.setStyleSheet(f"""
             QFrame {{
-                background: qlineargradient(y1:0, y2:1, stop:0 #12142a, stop:1 #0d0f20);
+                background: {COLORS['bg_darker']};
                 border-left: 2px solid {COLORS['neon_green']};
             }}
         """)
@@ -313,10 +295,11 @@ class LogPanel(QFrame):
         
         # Header
         header = QWidget()
+        header.setStyleSheet(f"background: {COLORS['bg_card']};")
         header_layout = QHBoxLayout(header)
-        header_layout.setContentsMargins(14, 14, 14, 14)
+        header_layout.setContentsMargins(12, 10, 12, 10)
         
-        title = QLabel("◢ TERMINAL LOG")
+        title = QLabel("◢ TERMINAL")
         title.setStyleSheet(f"""
             color: {COLORS['neon_green']};
             font-size: 10px;
@@ -327,7 +310,7 @@ class LogPanel(QFrame):
         header_layout.addStretch()
         
         btn_clear = CyberButton("CLEAR", "danger")
-        btn_clear.setFixedSize(55, 26)
+        btn_clear.setFixedSize(50, 24)
         btn_clear.clicked.connect(self._clear)
         header_layout.addWidget(btn_clear)
         
@@ -345,11 +328,11 @@ class LogPanel(QFrame):
 
 
 class StatusBar(QFrame):
-    """Status bar dưới cùng"""
+    """Status bar"""
     
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setFixedHeight(34)
+        self.setFixedHeight(32)
         self.setStyleSheet(f"""
             QFrame {{
                 background: {COLORS['bg_darker']};
@@ -358,7 +341,7 @@ class StatusBar(QFrame):
         """)
         
         layout = QHBoxLayout(self)
-        layout.setContentsMargins(14, 0, 14, 0)
+        layout.setContentsMargins(12, 0, 12, 0)
         
         # Left
         left = QHBoxLayout()
@@ -366,7 +349,7 @@ class StatusBar(QFrame):
         dot = PulsingDot(COLORS['neon_green'])
         left.addWidget(dot)
         
-        status = QLabel("ONLINE")
+        status = QLabel("SYSTEM ONLINE")
         status.setStyleSheet(f"color: {COLORS['neon_green']}; font-size: 9px;")
         left.addWidget(status)
         
@@ -374,18 +357,9 @@ class StatusBar(QFrame):
         layout.addStretch()
         
         # Right
-        right = QHBoxLayout()
-        right.setSpacing(18)
-        
-        hidemium = QLabel("HIDEMIUM: <span style='color:#00ff66'>OK</span>")
-        hidemium.setStyleSheet(f"color: {COLORS['text_muted']}; font-size: 9px;")
-        right.addWidget(hidemium)
-        
-        version = QLabel("v2.0.77")
-        version.setStyleSheet(f"color: {COLORS['neon_cyan']}; font-size: 9px;")
-        right.addWidget(version)
-        
-        layout.addLayout(right)
+        version = QLabel("FB MANAGER PRO v2.0.77 | CYBERPUNK EDITION")
+        version.setStyleSheet(f"color: {COLORS['text_muted']}; font-size: 9px;")
+        layout.addWidget(version)
 
 
 class MainWindow(QMainWindow):
@@ -417,17 +391,17 @@ class MainWindow(QMainWindow):
         self.sidebar = Sidebar()
         content_layout.addWidget(self.sidebar)
         
-        # Main area with effects
-        main_area = QWidget()
-        main_area.setStyleSheet(f"background: {COLORS['bg_dark']};")
-        main_area_layout = QVBoxLayout(main_area)
-        main_area_layout.setContentsMargins(0, 0, 0, 0)
-        main_area_layout.setSpacing(0)
+        # Main area container (for effects)
+        self.main_container = QWidget()
+        self.main_container.setStyleSheet(f"background: {COLORS['bg_dark']};")
+        main_container_layout = QVBoxLayout(self.main_container)
+        main_container_layout.setContentsMargins(0, 0, 0, 0)
+        main_container_layout.setSpacing(0)
         
         # Pages stack
         self.pages = QStackedWidget()
         
-        # Log panel reference for pages
+        # Log panel
         self.log_panel = LogPanel()
         
         # Create pages
@@ -439,9 +413,9 @@ class MainWindow(QMainWindow):
             page = self._create_placeholder_page(tab_id)
             self.pages.addWidget(page)
         
-        main_area_layout.addWidget(self.pages)
+        main_container_layout.addWidget(self.pages)
         
-        content_layout.addWidget(main_area, 1)
+        content_layout.addWidget(self.main_container, 1)
         content_layout.addWidget(self.log_panel)
         
         main_layout.addWidget(content, 1)
@@ -450,7 +424,7 @@ class MainWindow(QMainWindow):
         self.status_bar = StatusBar()
         main_layout.addWidget(self.status_bar)
         
-        # Effects overlays
+        # Effects - CHỈ TRÊN MAIN CONTAINER
         self._setup_effects()
         
         # Connect navigation
@@ -463,34 +437,34 @@ class MainWindow(QMainWindow):
         # Startup logs
         self.log("System boot complete", "success")
         self.log("FB Manager Pro v2.0.77", "info")
+        self.log("Cyberpunk Edition", "info")
         
         # Check connection
         QTimer.singleShot(1000, self._check_connection)
     
     def _setup_effects(self):
-        """Setup Cyberpunk effects"""
-        # Grid background
-        self.grid = CyberGrid(self)
+        """Setup Cyberpunk effects - CHỈ TRÊN MAIN AREA"""
+        # Grid background - parent là main_container
+        self.grid = CyberGrid(self.main_container)
         self.grid.lower()
         
         # Neon rain
-        self.rain = NeonRain(self)
+        self.rain = NeonRain(self.main_container)
         self.rain.lower()
         
-        # Neon flash effect
-        self.flash = NeonFlash(self)
-        
-        # Scanlines (on top)
-        self.scanlines = ScanlineOverlay(self)
+        # Scanlines
+        self.scanlines = ScanlineOverlay(self.main_container)
         self.scanlines.raise_()
     
     def resizeEvent(self, event):
         """Resize effects with window"""
         super().resizeEvent(event)
-        self.grid.setGeometry(0, 0, self.width(), self.height())
-        self.rain.setGeometry(0, 0, self.width(), self.height())
-        self.flash.setGeometry(0, 0, self.width(), self.height())
-        self.scanlines.setGeometry(0, 0, self.width(), self.height())
+        # Effects chỉ trong main_container
+        w = self.main_container.width()
+        h = self.main_container.height()
+        self.grid.setGeometry(0, 0, w, h)
+        self.rain.setGeometry(0, 0, w, h)
+        self.scanlines.setGeometry(0, 0, w, h)
     
     def _create_placeholder_page(self, tab_id: str) -> QWidget:
         """Create placeholder page"""
@@ -505,36 +479,41 @@ class MainWindow(QMainWindow):
         
         page = QWidget()
         layout = QVBoxLayout(page)
-        layout.setContentsMargins(24, 24, 24, 24)
+        layout.setContentsMargins(20, 20, 20, 20)
         
         title = CyberTitle(titles.get(tab_id, tab_id), f"Quản lý {titles.get(tab_id, tab_id)}", colors.get(tab_id, "cyan"))
         layout.addWidget(title)
         
-        placeholder = QLabel(f"🚧 {titles.get(tab_id, tab_id).upper()} - Coming soon...")
-        placeholder.setStyleSheet(f"color: {COLORS['text_muted']}; font-size: 14px;")
+        # Placeholder content
+        placeholder_card = CyberCard(COLORS.get(f"neon_{colors.get(tab_id, 'cyan')}"))
+        placeholder_card_layout = QVBoxLayout(placeholder_card)
+        placeholder_card_layout.setContentsMargins(40, 60, 40, 60)
+        
+        placeholder = QLabel(f"🚧 {titles.get(tab_id, tab_id).upper()}\n\nTính năng đang phát triển...")
+        placeholder.setStyleSheet(f"color: {COLORS['text_muted']}; font-size: 16px;")
         placeholder.setAlignment(Qt.AlignCenter)
-        layout.addWidget(placeholder, 1)
+        placeholder_card_layout.addWidget(placeholder)
+        
+        layout.addWidget(placeholder_card)
+        layout.addStretch()
         
         return page
     
     def _switch_tab(self, tab_id: str):
         """Switch to tab"""
-        # Update nav items
         for tid, nav in self.sidebar.nav_items.items():
             nav.set_active(tid == tab_id)
         
-        # Switch page
         tab_indices = {
             "profiles": 0, "login": 1, "pages": 2, "reels": 3,
             "content": 4, "groups": 5, "scripts": 6, "posts": 7
         }
         self.pages.setCurrentIndex(tab_indices.get(tab_id, 0))
         
-        self.log(f"→ {tab_id.upper()}", "info")
+        self.log(f"▸ {tab_id.upper()}", "info")
     
     def _check_connection(self):
         """Check Hidemium connection"""
-        # Simulate - in real app, call API
         self.sidebar.set_connection(False)
         self.log("Hidemium not connected", "warning")
     
@@ -545,11 +524,8 @@ class MainWindow(QMainWindow):
 
 def main():
     app = QApplication(sys.argv)
-    
-    # Apply stylesheet
     app.setStyleSheet(CYBERPUNK_QSS)
     
-    # Create window
     window = MainWindow()
     window.show()
     
