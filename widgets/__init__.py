@@ -4,7 +4,7 @@ FB Manager Pro - Widgets
 
 from .cyber_widgets import (
     CyberButton,
-    CyberButtonSmall,
+    ToggleButton,
     CyberInput,
     CyberComboBox,
     CyberCard,
@@ -27,7 +27,7 @@ from .cyber_effects import (
 
 __all__ = [
     "CyberButton",
-    "CyberButtonSmall",
+    "ToggleButton",
     "CyberInput",
     "CyberComboBox",
     "CyberCard",
