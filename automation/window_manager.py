@@ -1,158 +1,204 @@
 """
-FB Manager Pro - Window Manager
-Manage browser window positions and sizes
+Window Manager - Quản lý vị trí và kích thước cửa sổ trình duyệt
+Sắp xếp các cửa sổ theo grid, không chồng lên nhau
 """
-
-import subprocess
-import platform
-from typing import Dict, Tuple, Optional
+import threading
+from typing import Dict, Tuple, Optional, List
 
 
 class WindowManager:
-    """Manage browser window positioning"""
-    
+    """
+    Quản lý vị trí cửa sổ theo grid
+
+    Usage:
+        manager = WindowManager.get_instance()
+        slot = manager.acquire_slot()  # Lấy vị trí
+        x, y, w, h = manager.get_bounds(slot)  # Lấy bounds
+        # ... dùng xong ...
+        manager.release_slot(slot)  # Trả lại slot
+    """
+
+    _instance = None
+    _lock = threading.Lock()
+
+    # Kích thước màn hình mặc định - auto detect nếu có thể
+    SCREEN_WIDTH = 5120  # Default cho ultrawide
+    SCREEN_HEIGHT = 1440
+
+    # Kích thước cửa sổ mặc định (trước khi scale)
+    # Scale 45% => hiển thị 900x810 trên màn hình
+    WINDOW_WIDTH = 2000
+    WINDOW_HEIGHT = 1800
+    MARGIN = 20
+    SCALE_FACTOR = 0.45  # 45%
+
+    # Giới hạn số cột/hàng
+    MAX_COLS = 6   # 6 cửa sổ mỗi hàng
+    MAX_ROWS = 3   # 3 hàng
+
+    # Offset để tránh taskbar
+    TOP_OFFSET = 0
+    LEFT_OFFSET = 0
+
     def __init__(self):
-        self.system = platform.system()
-    
-    def get_screen_size(self) -> Tuple[int, int]:
-        """Get screen resolution"""
-        if self.system == "Windows":
-            try:
-                import ctypes
-                user32 = ctypes.windll.user32
-                return user32.GetSystemMetrics(0), user32.GetSystemMetrics(1)
-            except:
-                return 1920, 1080
-        elif self.system == "Darwin":  # macOS
-            try:
-                output = subprocess.check_output(
-                    ["system_profiler", "SPDisplaysDataType"],
-                    text=True
-                )
-                # Parse resolution from output
-                for line in output.split('\n'):
-                    if "Resolution" in line:
-                        parts = line.split(':')[1].strip().split('x')
-                        return int(parts[0].strip()), int(parts[1].split()[0])
-            except:
-                return 1920, 1080
-        else:  # Linux
-            try:
-                output = subprocess.check_output(["xrandr"], text=True)
-                for line in output.split('\n'):
-                    if '*' in line:  # Current resolution
-                        res = line.split()[0].split('x')
-                        return int(res[0]), int(res[1])
-            except:
-                return 1920, 1080
-        
-        return 1920, 1080
-    
-    def calculate_grid_position(
-        self,
-        index: int,
-        total: int,
-        screen_width: int = None,
-        screen_height: int = None
-    ) -> Dict[str, int]:
-        """Calculate window position in a grid layout"""
-        if screen_width is None or screen_height is None:
-            screen_width, screen_height = self.get_screen_size()
-        
-        # Calculate grid dimensions
-        if total <= 1:
-            cols, rows = 1, 1
-        elif total <= 2:
-            cols, rows = 2, 1
-        elif total <= 4:
-            cols, rows = 2, 2
-        elif total <= 6:
-            cols, rows = 3, 2
-        elif total <= 9:
-            cols, rows = 3, 3
-        else:
-            cols, rows = 4, 3
-        
-        # Calculate cell size
-        cell_width = screen_width // cols
-        cell_height = screen_height // rows
-        
-        # Calculate position
-        col = index % cols
-        row = index // cols
-        
-        x = col * cell_width
-        y = row * cell_height
-        
+        self._slots: Dict[int, bool] = {}  # slot_id -> is_occupied
+        self._max_slots = 0
+        self._cols = 0
+        self._rows = 0
+        self._auto_detect_screen_size()
+        self._recalculate_grid()
+
+    def _auto_detect_screen_size(self):
+        """Tự động phát hiện kích thước màn hình"""
+        try:
+            import tkinter as tk
+            root = tk.Tk()
+            root.withdraw()  # Ẩn cửa sổ
+            self.SCREEN_WIDTH = root.winfo_screenwidth()
+            self.SCREEN_HEIGHT = root.winfo_screenheight()
+            root.destroy()
+            print(f"[WindowManager] Auto-detected screen: {self.SCREEN_WIDTH}x{self.SCREEN_HEIGHT}")
+        except Exception as e:
+            print(f"[WindowManager] Could not detect screen size, using default: {e}")
+
+    @classmethod
+    def get_instance(cls) -> 'WindowManager':
+        """Get singleton instance"""
+        if cls._instance is None:
+            with cls._lock:
+                if cls._instance is None:
+                    cls._instance = WindowManager()
+        return cls._instance
+
+    @classmethod
+    def reset_instance(cls):
+        """Reset singleton để re-detect screen size"""
+        with cls._lock:
+            cls._instance = None
+
+    def _recalculate_grid(self):
+        """Tính lại số cột/hàng dựa trên kích thước màn hình"""
+        # Sử dụng giới hạn cố định
+        self._cols = self.MAX_COLS
+        self._rows = self.MAX_ROWS
+        self._max_slots = self._cols * self._rows
+
+        # Initialize slots
+        for i in range(self._max_slots):
+            if i not in self._slots:
+                self._slots[i] = False
+
+    def set_screen_size(self, width: int, height: int):
+        """Cập nhật kích thước màn hình"""
+        self.SCREEN_WIDTH = width
+        self.SCREEN_HEIGHT = height
+        self._recalculate_grid()
+
+    def set_window_size(self, width: int, height: int):
+        """Cập nhật kích thước cửa sổ"""
+        self.WINDOW_WIDTH = width
+        self.WINDOW_HEIGHT = height
+        self._recalculate_grid()
+
+    def acquire_slot(self) -> int:
+        """
+        Lấy slot trống cho cửa sổ mới
+        Returns slot_id hoặc -1 nếu hết slot
+        """
+        with self._lock:
+            for slot_id in range(self._max_slots):
+                if not self._slots.get(slot_id, False):
+                    self._slots[slot_id] = True
+                    return slot_id
+
+            # Nếu hết slot, mở rộng grid (cửa sổ sẽ đè nhau)
+            new_slot = self._max_slots
+            self._max_slots += 1
+            self._slots[new_slot] = True
+            return new_slot
+
+    def release_slot(self, slot_id: int):
+        """Trả lại slot khi đóng cửa sổ"""
+        with self._lock:
+            if slot_id in self._slots:
+                self._slots[slot_id] = False
+
+    def get_bounds(self, slot_id: int) -> Tuple[int, int, int, int]:
+        """
+        Tính toán vị trí và kích thước cho slot
+
+        Returns: (x, y, width, height) - kích thước đã scale
+        """
+        # Kích thước hiển thị thực tế sau khi scale
+        display_width = int(self.WINDOW_WIDTH * self.SCALE_FACTOR)
+        display_height = int(self.WINDOW_HEIGHT * self.SCALE_FACTOR)
+
+        if slot_id < 0:
+            return (0, 0, display_width, display_height)
+
+        # Dùng MAX_COLS/MAX_ROWS trực tiếp để đảm bảo đúng giá trị
+        cols = self.MAX_COLS
+        rows = self.MAX_ROWS
+
+        # Tính row và col từ slot_id
+        col = slot_id % cols
+        row = (slot_id // cols) % rows
+
+        x = self.LEFT_OFFSET + col * (display_width + self.MARGIN)
+        y = self.TOP_OFFSET + row * (display_height + self.MARGIN)
+
+        print(f"[WindowManager] get_bounds: slot={slot_id}, col={col}, row={row}, x={x}, y={y}")
+        return (x, y, display_width, display_height)
+
+    def get_grid_info(self) -> Dict:
+        """Lấy thông tin grid hiện tại"""
         return {
-            "x": x,
-            "y": y,
-            "width": cell_width,
-            "height": cell_height
+            'cols': self._cols,
+            'rows': self._rows,
+            'max_slots': self._max_slots,
+            'used_slots': sum(1 for v in self._slots.values() if v),
+            'window_size': (self.WINDOW_WIDTH, self.WINDOW_HEIGHT),
+            'screen_size': (self.SCREEN_WIDTH, self.SCREEN_HEIGHT)
         }
-    
-    def move_window(self, window_id: str, x: int, y: int, width: int, height: int) -> bool:
-        """Move and resize a window (platform specific)"""
-        if self.system == "Windows":
-            return self._move_window_windows(window_id, x, y, width, height)
-        elif self.system == "Darwin":
-            return self._move_window_macos(window_id, x, y, width, height)
-        else:
-            return self._move_window_linux(window_id, x, y, width, height)
-    
-    def _move_window_windows(self, window_id: str, x: int, y: int, width: int, height: int) -> bool:
-        """Move window on Windows"""
-        try:
-            import ctypes
-            user32 = ctypes.windll.user32
-            hwnd = int(window_id)
-            user32.MoveWindow(hwnd, x, y, width, height, True)
-            return True
-        except Exception as e:
-            print(f"[WindowManager] Error moving window: {e}")
-            return False
-    
-    def _move_window_macos(self, window_id: str, x: int, y: int, width: int, height: int) -> bool:
-        """Move window on macOS using AppleScript"""
-        try:
-            script = f'''
-            tell application "System Events"
-                set frontApp to first application process whose frontmost is true
-                tell frontApp
-                    set position of window 1 to {{{x}, {y}}}
-                    set size of window 1 to {{{width}, {height}}}
-                end tell
-            end tell
-            '''
-            subprocess.run(["osascript", "-e", script], check=True)
-            return True
-        except Exception as e:
-            print(f"[WindowManager] Error moving window: {e}")
-            return False
-    
-    def _move_window_linux(self, window_id: str, x: int, y: int, width: int, height: int) -> bool:
-        """Move window on Linux using wmctrl or xdotool"""
-        try:
-            # Try wmctrl first
-            subprocess.run([
-                "wmctrl", "-i", "-r", window_id,
-                "-e", f"0,{x},{y},{width},{height}"
-            ], check=True)
-            return True
-        except:
-            try:
-                # Fallback to xdotool
-                subprocess.run([
-                    "xdotool", "windowmove", window_id, str(x), str(y)
-                ], check=True)
-                subprocess.run([
-                    "xdotool", "windowsize", window_id, str(width), str(height)
-                ], check=True)
-                return True
-            except Exception as e:
-                print(f"[WindowManager] Error moving window: {e}")
-                return False
+
+    def reset(self):
+        """Reset tất cả slots"""
+        with self._lock:
+            for slot_id in self._slots:
+                self._slots[slot_id] = False
 
 
-# Global instance
-window_manager = WindowManager()
+# Convenience functions
+def get_window_manager() -> WindowManager:
+    """Get singleton window manager instance"""
+    return WindowManager.get_instance()
+
+
+def acquire_window_slot() -> int:
+    """Acquire a window slot"""
+    manager = get_window_manager()
+    slot = manager.acquire_slot()
+    print(f"[WindowManager] Acquired slot {slot}, grid: {manager._cols}x{manager._rows}, screen: {manager.SCREEN_WIDTH}x{manager.SCREEN_HEIGHT}")
+    return slot
+
+
+def release_window_slot(slot_id: int):
+    """Release a window slot"""
+    get_window_manager().release_slot(slot_id)
+
+
+def get_window_bounds(slot_id: int) -> Tuple[int, int, int, int]:
+    """Get bounds for a slot"""
+    bounds = get_window_manager().get_bounds(slot_id)
+    print(f"[WindowManager] get_window_bounds(slot={slot_id}) -> x={bounds[0]}, y={bounds[1]}, w={bounds[2]}, h={bounds[3]}")
+    return bounds
+
+
+def configure_window_size(width: int = 400, height: int = 320):
+    """Configure default window size"""
+    get_window_manager().set_window_size(width, height)
+
+
+def configure_screen_size(width: int = 1920, height: int = 1080):
+    """Configure screen size"""
+    get_window_manager().set_screen_size(width, height)
