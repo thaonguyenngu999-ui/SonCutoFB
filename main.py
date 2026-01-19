@@ -240,8 +240,9 @@ class ProfilesPage(QWidget):
         self.table = CyberTable(["✓", "ID", "NAME", "FOLDER", "ACTION"])
         self.table.setColumnWidth(0, 50)
         self.table.setColumnWidth(1, 100)
-        self.table.setColumnWidth(2, 350)
+        self.table.setColumnWidth(2, 300)
         self.table.setColumnWidth(3, 150)
+        self.table.setColumnWidth(4, 120)  # ACTION column fixed width
         
         table_layout.addWidget(self.table)
         
