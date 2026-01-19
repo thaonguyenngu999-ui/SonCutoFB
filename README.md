@@ -70,36 +70,6 @@ pip install -r requirements.txt
 python main.py
 ```
 
-## 📁 Cấu trúc dự án
-
-```
-fb_manager_pro/
-├── main.py                 # Entry point
-├── config.py               # Cấu hình & theme colors
-├── db.py                   # Database SQLite
-├── api_service.py          # Hidemium API client
-├── requirements.txt
-├── README.md
-├── data/
-│   └── fb_manager.db       # SQLite database
-├── widgets/
-│   ├── __init__.py
-│   └── cyber_widgets.py    # Custom UI components
-├── tabs/
-│   ├── __init__.py
-│   ├── base_tab.py
-│   ├── profiles_tab.py
-│   ├── login_tab.py
-│   ├── pages_tab.py
-│   ├── reels_tab.py
-│   ├── content_tab.py
-│   ├── groups_tab.py
-│   ├── scripts_tab.py
-│   └── posts_tab.py
-└── automation/
-    └── window_manager.py   # Browser window management
-```
-
 ## 🎨 Theme Colors
 
 | Color | Hex | Usage |
@@ -124,29 +94,9 @@ API_CONFIG = {
 }
 ```
 
-## 🔧 Build executable
-
-### Windows
-```bash
-pyinstaller --onefile --windowed --name "FB Manager Pro" main.py
-```
-
-### macOS
-```bash
-pyinstaller --onefile --windowed --name "FB Manager Pro" main.py
-```
-
 ## 📝 License
 
-MIT License - Xem file [LICENSE](LICENSE) để biết thêm chi tiết.
-
-## 🤝 Contributing
-
-1. Fork repository
-2. Tạo branch mới (`git checkout -b feature/amazing-feature`)
-3. Commit changes (`git commit -m 'Add amazing feature'`)
-4. Push branch (`git push origin feature/amazing-feature`)
-5. Tạo Pull Request
+MIT License
 
 ---
 
