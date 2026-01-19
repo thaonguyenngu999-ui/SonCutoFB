@@ -1,6 +1,7 @@
 """
 FB Manager Pro - Main Application
-V3 - BIGGER & BOLDER CYBERPUNK
+🐱 CYBERPUNK CUTE CAT Edition 🐱
+Rounded, Soft, Kawaii ~nyaa
 """
 
 import sys
@@ -20,13 +21,12 @@ from widgets import (
 )
 
 
-class Sidebar(QFrame):
-    """Sidebar CYBERPUNK"""
+class Sidebar(QWidget):
+    """Sidebar cute rounded 🐱"""
     
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setObjectName("sidebar")
-        self.setFixedWidth(240)
+        self.setFixedWidth(260)
         
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -34,25 +34,21 @@ class Sidebar(QFrame):
         
         # Logo section
         logo_section = QWidget()
-        logo_section.setStyleSheet(f"background: {COLORS['bg_card']};")
+        logo_section.setFixedHeight(100)
         logo_layout = QHBoxLayout(logo_section)
-        logo_layout.setContentsMargins(16, 20, 16, 20)
+        logo_layout.setContentsMargins(20, 20, 20, 20)
         
-        # Logo box
+        # Logo box - rounded
         logo_box = QFrame()
-        logo_box.setFixedSize(48, 48)
+        logo_box.setFixedSize(56, 56)
         logo_box.setStyleSheet(f"""
-            background: {COLORS['neon_cyan']};
-            border-radius: 4px;
+            background: qlineargradient(x1:0, x2:1, stop:0 {COLORS['neon_pink']}, stop:1 {COLORS['neon_purple']});
+            border-radius: 16px;
         """)
         logo_box_layout = QVBoxLayout(logo_box)
         logo_box_layout.setAlignment(Qt.AlignCenter)
-        logo_text = QLabel("SC")
-        logo_text.setStyleSheet(f"""
-            color: {COLORS['bg_dark']};
-            font-size: 18px;
-            font-weight: bold;
-        """)
+        logo_text = QLabel("🐱")
+        logo_text.setStyleSheet("font-size: 28px;")
         logo_text.setAlignment(Qt.AlignCenter)
         logo_box_layout.addWidget(logo_text)
         logo_layout.addWidget(logo_box)
@@ -60,20 +56,20 @@ class Sidebar(QFrame):
         # Logo title
         title_widget = QWidget()
         title_layout = QVBoxLayout(title_widget)
-        title_layout.setContentsMargins(12, 0, 0, 0)
+        title_layout.setContentsMargins(14, 0, 0, 0)
         title_layout.setSpacing(2)
         
         main_title = QLabel("SonCuto")
         main_title.setStyleSheet(f"""
             color: {COLORS['text_primary']};
-            font-size: 16px;
+            font-size: 18px;
             font-weight: bold;
         """)
         title_layout.addWidget(main_title)
         
-        sub_title = QLabel("FB MANAGER PRO")
+        sub_title = QLabel("✦ FB MANAGER ✦")
         sub_title.setStyleSheet(f"""
-            color: {COLORS['neon_cyan']};
+            color: {COLORS['neon_pink']};
             font-size: 10px;
             letter-spacing: 2px;
         """)
@@ -83,30 +79,32 @@ class Sidebar(QFrame):
         logo_layout.addStretch()
         layout.addWidget(logo_section)
         
-        # Divider
+        # Divider - cute gradient
         divider = QFrame()
         divider.setFixedHeight(3)
-        divider.setStyleSheet(f"background: {COLORS['neon_cyan']};")
+        divider.setStyleSheet(f"""
+            background: qlineargradient(x1:0, x2:1, stop:0 {COLORS['neon_pink']}, stop:0.5 {COLORS['neon_purple']}, stop:1 {COLORS['neon_cyan']});
+            margin: 0 16px;
+            border-radius: 2px;
+        """)
         layout.addWidget(divider)
         
         # Menu label
-        menu_label = QLabel("◢ MAIN MENU")
+        menu_label = QLabel("✦ MENU")
         menu_label.setStyleSheet(f"""
             color: {COLORS['text_muted']};
             font-size: 11px;
             letter-spacing: 3px;
-            padding: 18px 20px 10px 20px;
-            background: {COLORS['bg_darker']};
+            padding: 18px 24px 10px 24px;
         """)
         layout.addWidget(menu_label)
         
         # Navigation
         self.nav_items = {}
         nav_container = QWidget()
-        nav_container.setStyleSheet(f"background: {COLORS['bg_darker']};")
         nav_layout = QVBoxLayout(nav_container)
-        nav_layout.setContentsMargins(8, 0, 8, 0)
-        nav_layout.setSpacing(4)
+        nav_layout.setContentsMargins(12, 0, 12, 0)
+        nav_layout.setSpacing(6)
         
         for item in MENU_ITEMS:
             nav = NavItem(item["text"], item["icon"], item["id"], item["color"])
@@ -118,19 +116,18 @@ class Sidebar(QFrame):
         
         # Bottom section
         bottom = QWidget()
-        bottom.setStyleSheet(f"background: {COLORS['bg_darker']};")
         bottom_layout = QVBoxLayout(bottom)
-        bottom_layout.setContentsMargins(12, 10, 12, 16)
+        bottom_layout.setContentsMargins(16, 10, 16, 20)
         
-        # Connection status
+        # Connection status - cute rounded
         conn_frame = QFrame()
         conn_frame.setStyleSheet(f"""
             background: {COLORS['bg_card']};
             border: 2px solid {COLORS['border']};
-            border-left: 4px solid {COLORS['text_muted']};
+            border-radius: 14px;
         """)
         conn_layout = QHBoxLayout(conn_frame)
-        conn_layout.setContentsMargins(12, 10, 12, 10)
+        conn_layout.setContentsMargins(14, 12, 14, 12)
         
         self.conn_dot = PulsingDot(COLORS['text_muted'])
         conn_layout.addWidget(self.conn_dot)
@@ -144,14 +141,17 @@ class Sidebar(QFrame):
         conn_layout.addWidget(self.conn_text)
         conn_layout.addStretch()
         
+        conn_cat = QLabel("🐱")
+        conn_layout.addWidget(conn_cat)
+        
         bottom_layout.addWidget(conn_frame)
         
         # Version
-        version = QLabel("v2.0.77 // CYBERPUNK")
+        version = QLabel("v2.0.77 ✦ CUTE CAT")
         version.setStyleSheet(f"""
             color: {COLORS['text_muted']};
             font-size: 10px;
-            margin-top: 10px;
+            margin-top: 12px;
         """)
         version.setAlignment(Qt.AlignCenter)
         bottom_layout.addWidget(version)
@@ -165,10 +165,10 @@ class Sidebar(QFrame):
         # Background
         painter.fillRect(self.rect(), QColor(COLORS['bg_darker']))
         
-        # Right border gradient
-        gradient = QLinearGradient(self.width() - 3, 0, self.width() - 3, self.height())
-        gradient.setColorAt(0, QColor(COLORS['neon_cyan']))
-        gradient.setColorAt(0.5, QColor(COLORS['neon_magenta']))
+        # Right border - gradient
+        gradient = QLinearGradient(self.width() - 2, 0, self.width() - 2, self.height())
+        gradient.setColorAt(0, QColor(COLORS['neon_pink']))
+        gradient.setColorAt(0.5, QColor(COLORS['neon_purple']))
         gradient.setColorAt(1, QColor(COLORS['neon_cyan']))
         
         painter.setPen(QPen(QBrush(gradient), 3))
@@ -176,36 +176,36 @@ class Sidebar(QFrame):
     
     def set_connection(self, connected: bool):
         if connected:
-            self.conn_dot.color = QColor(COLORS['neon_green'])
-            self.conn_text.setText("HIDEMIUM OK")
-            self.conn_text.setStyleSheet(f"color: {COLORS['neon_green']}; font-size: 11px;")
+            self.conn_dot.color = QColor(COLORS['neon_mint'])
+            self.conn_text.setText("CONNECTED 😸")
+            self.conn_text.setStyleSheet(f"color: {COLORS['neon_mint']}; font-size: 11px;")
         else:
-            self.conn_dot.color = QColor(COLORS['neon_red'])
-            self.conn_text.setText("OFFLINE")
-            self.conn_text.setStyleSheet(f"color: {COLORS['neon_red']}; font-size: 11px;")
+            self.conn_dot.color = QColor(COLORS['neon_coral'])
+            self.conn_text.setText("OFFLINE 😿")
+            self.conn_text.setStyleSheet(f"color: {COLORS['neon_coral']}; font-size: 11px;")
 
 
 class ProfilesPage(QWidget):
-    """Profiles tab - CYBERPUNK"""
+    """Profiles tab cute 🐱"""
     
     def __init__(self, log_func, parent=None):
         super().__init__(parent)
         self.log = log_func
         
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(24, 24, 24, 24)
-        layout.setSpacing(20)
+        layout.setContentsMargins(28, 28, 28, 28)
+        layout.setSpacing(24)
         
         # Title
-        title = CyberTitle("Profiles", "Quản lý tài khoản Hidemium Browser", "cyan")
+        title = CyberTitle("Profiles", "Quản lý tài khoản Hidemium Browser", "pink")
         layout.addWidget(title)
         
         # Stats row
         stats_layout = QHBoxLayout()
-        stats_layout.setSpacing(16)
+        stats_layout.setSpacing(18)
         
-        self.stat_total = CyberStatCard("TỔNG PROFILES", "0", "▲ +0 tuần này", "cyan")
-        self.stat_running = CyberStatCard("ĐANG CHẠY", "0", "● Active", "green")
+        self.stat_total = CyberStatCard("TỔNG PROFILES", "0", "▲ +0 tuần này", "pink")
+        self.stat_running = CyberStatCard("ĐANG CHẠY", "0", "● Active", "mint")
         self.stat_folders = CyberStatCard("FOLDERS", "0", "Categories", "purple")
         self.stat_scripts = CyberStatCard("SCRIPTS", "0", "Automation", "yellow")
         
@@ -218,13 +218,13 @@ class ProfilesPage(QWidget):
         
         # Toolbar
         toolbar = QHBoxLayout()
-        toolbar.setSpacing(12)
+        toolbar.setSpacing(14)
         
         search = CyberInput("🔍 Tìm kiếm profile...")
-        search.setFixedWidth(280)
+        search.setFixedWidth(300)
         toolbar.addWidget(search)
         
-        folder_combo = CyberComboBox(["Tất cả thư mục"])
+        folder_combo = CyberComboBox(["📁 Tất cả thư mục"])
         toolbar.addWidget(folder_combo)
         
         toolbar.addStretch()
@@ -232,8 +232,8 @@ class ProfilesPage(QWidget):
         btn_refresh = CyberButton("REFRESH", "ghost", "⟳")
         toolbar.addWidget(btn_refresh)
         
-        btn_sync = CyberButton("SYNC", "primary", "🔄")
-        btn_sync.clicked.connect(lambda: self.log("Syncing profiles...", "info"))
+        btn_sync = CyberButton("SYNC", "cyan", "🔄")
+        btn_sync.clicked.connect(lambda: self.log("Syncing profiles ~nyaa", "info"))
         toolbar.addWidget(btn_sync)
         
         btn_create = CyberButton("CREATE", "success", "➕")
@@ -242,23 +242,26 @@ class ProfilesPage(QWidget):
         layout.addLayout(toolbar)
         
         # Table card
-        card = CyberCard(COLORS['neon_cyan'])
+        card = CyberCard(COLORS['neon_pink'])
         card_layout = QVBoxLayout(card)
-        card_layout.setContentsMargins(2, 2, 2, 2)
+        card_layout.setContentsMargins(4, 4, 4, 4)
         
         # Card header
         header = QFrame()
-        header.setFixedHeight(52)
-        header.setStyleSheet(f"background: {COLORS['bg_darker']};")
+        header.setFixedHeight(56)
+        header.setStyleSheet(f"""
+            background: {COLORS['bg_darker']};
+            border-radius: 16px 16px 0 0;
+        """)
         header_layout = QHBoxLayout(header)
-        header_layout.setContentsMargins(20, 0, 20, 0)
+        header_layout.setContentsMargins(22, 0, 22, 0)
         
-        header_title = QLabel("◢ PROFILE DATABASE")
+        header_title = QLabel("😺 PROFILE DATABASE")
         header_title.setStyleSheet(f"""
-            color: {COLORS['neon_cyan']};
+            color: {COLORS['neon_pink']};
             font-size: 14px;
             font-weight: bold;
-            letter-spacing: 3px;
+            letter-spacing: 2px;
         """)
         header_layout.addWidget(header_title)
         
@@ -267,6 +270,11 @@ class ProfilesPage(QWidget):
         header_layout.addWidget(self.count_label)
         
         header_layout.addStretch()
+        
+        header_cat = QLabel("🐱✦🐱✦🐱")
+        header_cat.setStyleSheet(f"color: {COLORS['text_muted']}; font-size: 12px;")
+        header_layout.addWidget(header_cat)
+        
         card_layout.addWidget(header)
         
         # Table
@@ -284,16 +292,15 @@ class ProfilesPage(QWidget):
         self.stat_folders.set_value("12")
         self.stat_scripts.set_value("34")
         self.count_label.setText("[247 profiles]")
-        self.log("Loaded 247 profiles", "success")
+        self.log("Loaded 247 profiles ~nyaa", "success")
 
 
 class LogPanel(QWidget):
-    """Log panel CYBERPUNK"""
+    """Log panel cute rounded 🐱"""
     
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setFixedWidth(340)
-        self.corner_size = 0
+        self.setFixedWidth(360)
         
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -301,23 +308,22 @@ class LogPanel(QWidget):
         
         # Header
         header = QWidget()
-        header.setFixedHeight(50)
-        header.setStyleSheet(f"background: {COLORS['bg_card']};")
+        header.setFixedHeight(56)
         header_layout = QHBoxLayout(header)
-        header_layout.setContentsMargins(16, 0, 16, 0)
+        header_layout.setContentsMargins(20, 0, 20, 0)
         
-        title = QLabel("◢ TERMINAL")
+        title = QLabel("😸 TERMINAL")
         title.setStyleSheet(f"""
-            color: {COLORS['neon_green']};
-            font-size: 13px;
+            color: {COLORS['neon_mint']};
+            font-size: 14px;
             font-weight: bold;
-            letter-spacing: 3px;
+            letter-spacing: 2px;
         """)
         header_layout.addWidget(title)
         header_layout.addStretch()
         
         btn_clear = CyberButton("CLEAR", "danger")
-        btn_clear.setFixedHeight(32)
+        btn_clear.setFixedHeight(34)
         btn_clear.clicked.connect(self._clear)
         header_layout.addWidget(btn_clear)
         
@@ -329,12 +335,18 @@ class LogPanel(QWidget):
     
     def paintEvent(self, event):
         painter = QPainter(self)
+        painter.setRenderHint(QPainter.Antialiasing)
         
         # Background
         painter.fillRect(self.rect(), QColor(COLORS['bg_darker']))
         
-        # Left border
-        painter.setPen(QPen(QColor(COLORS['neon_green']), 3))
+        # Left border gradient
+        gradient = QLinearGradient(0, 0, 0, self.height())
+        gradient.setColorAt(0, QColor(COLORS['neon_mint']))
+        gradient.setColorAt(0.5, QColor(COLORS['neon_cyan']))
+        gradient.setColorAt(1, QColor(COLORS['neon_purple']))
+        
+        painter.setPen(QPen(QBrush(gradient), 3))
         painter.drawLine(0, 0, 0, self.height())
     
     def add_line(self, message: str, level: str = "info"):
@@ -345,32 +357,35 @@ class LogPanel(QWidget):
 
 
 class StatusBar(QWidget):
-    """Status bar CYBERPUNK"""
+    """Status bar cute 🐱"""
     
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setFixedHeight(40)
+        self.setFixedHeight(44)
         
         layout = QHBoxLayout(self)
-        layout.setContentsMargins(16, 0, 16, 0)
+        layout.setContentsMargins(20, 0, 20, 0)
         
         # Left
         left = QHBoxLayout()
-        left.setSpacing(10)
+        left.setSpacing(12)
         
-        dot = PulsingDot(COLORS['neon_green'])
+        cat = QLabel("😺")
+        left.addWidget(cat)
+        
+        dot = PulsingDot(COLORS['neon_mint'])
         left.addWidget(dot)
         
         status = QLabel("SYSTEM ONLINE")
-        status.setStyleSheet(f"color: {COLORS['neon_green']}; font-size: 12px; font-weight: bold;")
+        status.setStyleSheet(f"color: {COLORS['neon_mint']}; font-size: 12px; font-weight: bold;")
         left.addWidget(status)
         
         layout.addLayout(left)
         layout.addStretch()
         
         # Right
-        version = QLabel("FB MANAGER PRO v2.0.77 // CYBERPUNK EDITION")
-        version.setStyleSheet(f"color: {COLORS['text_muted']}; font-size: 11px; letter-spacing: 1px;")
+        version = QLabel("FB MANAGER PRO v2.0.77 ✦ CUTE CAT EDITION 🐱")
+        version.setStyleSheet(f"color: {COLORS['text_muted']}; font-size: 11px;")
         layout.addWidget(version)
     
     def paintEvent(self, event):
@@ -379,18 +394,23 @@ class StatusBar(QWidget):
         # Background
         painter.fillRect(self.rect(), QColor(COLORS['bg_darker']))
         
-        # Top border
-        painter.setPen(QPen(QColor(COLORS['neon_cyan']), 2))
+        # Top border - gradient
+        gradient = QLinearGradient(0, 0, self.width(), 0)
+        gradient.setColorAt(0, QColor(COLORS['neon_pink']))
+        gradient.setColorAt(0.5, QColor(COLORS['neon_purple']))
+        gradient.setColorAt(1, QColor(COLORS['neon_cyan']))
+        
+        painter.setPen(QPen(QBrush(gradient), 2))
         painter.drawLine(0, 0, self.width(), 0)
 
 
 class MainWindow(QMainWindow):
-    """Main window"""
+    """Main window cute cat 🐱"""
     
     def __init__(self):
         super().__init__()
         
-        self.setWindowTitle("SonCuto - FB Manager Pro // CYBERPUNK")
+        self.setWindowTitle("🐱 SonCuto - FB Manager Pro ✦ Cute Cat Edition")
         self.setMinimumSize(1400, 800)
         self.resize(1600, 900)
         
@@ -454,9 +474,9 @@ class MainWindow(QMainWindow):
         self._switch_tab("profiles")
         
         # Logs
-        self.log("System boot complete", "success")
+        self.log("System boot complete ~nyaa", "success")
         self.log("FB Manager Pro v2.0.77", "info")
-        self.log("Cyberpunk Edition loaded", "info")
+        self.log("Cute Cat Edition loaded 🐱", "info")
         
         QTimer.singleShot(1000, self._check_connection)
     
@@ -480,27 +500,32 @@ class MainWindow(QMainWindow):
     
     def _create_placeholder_page(self, tab_id: str) -> QWidget:
         colors = {
-            "login": "green", "pages": "purple", "reels": "magenta",
-            "content": "yellow", "groups": "orange", "scripts": "cyan", "posts": "green"
+            "login": "mint", "pages": "purple", "reels": "pink",
+            "content": "yellow", "groups": "coral", "scripts": "cyan", "posts": "mint"
         }
         titles = {
             "login": "Login FB", "pages": "Pages", "reels": "Reels",
             "content": "Content", "groups": "Groups", "scripts": "Scripts", "posts": "Posts"
         }
+        cats = {
+            "login": "😺", "pages": "😸", "reels": "🐱",
+            "content": "😻", "groups": "😽", "scripts": "🙀", "posts": "😹"
+        }
         
         page = QWidget()
         layout = QVBoxLayout(page)
-        layout.setContentsMargins(24, 24, 24, 24)
+        layout.setContentsMargins(28, 28, 28, 28)
         
-        title = CyberTitle(titles.get(tab_id, tab_id), f"Quản lý {titles.get(tab_id, tab_id)}", colors.get(tab_id, "cyan"))
+        title = CyberTitle(titles.get(tab_id, tab_id), f"Quản lý {titles.get(tab_id, tab_id)}", colors.get(tab_id, "pink"))
         layout.addWidget(title)
         
         # Placeholder
-        placeholder_card = CyberCard(COLORS.get(f"neon_{colors.get(tab_id, 'cyan')}"))
+        placeholder_card = CyberCard(COLORS.get(f"neon_{colors.get(tab_id, 'pink')}", COLORS['neon_pink']))
         placeholder_card_layout = QVBoxLayout(placeholder_card)
-        placeholder_card_layout.setContentsMargins(50, 80, 50, 80)
+        placeholder_card_layout.setContentsMargins(60, 100, 60, 100)
         
-        placeholder = QLabel(f"🚧 {titles.get(tab_id, tab_id).upper()}\n\nTính năng đang phát triển...")
+        cat_emoji = cats.get(tab_id, "🐱")
+        placeholder = QLabel(f"{cat_emoji}\n\n{titles.get(tab_id, tab_id).upper()}\n\nTính năng đang phát triển ~nyaa")
         placeholder.setStyleSheet(f"color: {COLORS['text_muted']}; font-size: 18px;")
         placeholder.setAlignment(Qt.AlignCenter)
         placeholder_card_layout.addWidget(placeholder)
@@ -520,11 +545,11 @@ class MainWindow(QMainWindow):
         }
         self.pages.setCurrentIndex(tab_indices.get(tab_id, 0))
         
-        self.log(f"▸ {tab_id.upper()}", "info")
+        self.log(f"▸ {tab_id.upper()} 😺", "info")
     
     def _check_connection(self):
         self.sidebar.set_connection(False)
-        self.log("Hidemium not connected", "warning")
+        self.log("Hidemium not connected 😿", "warning")
     
     def log(self, message: str, level: str = "info"):
         self.log_panel.add_line(message, level)
