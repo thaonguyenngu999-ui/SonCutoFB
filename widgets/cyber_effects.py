@@ -13,7 +13,7 @@ import math
 class TearGlitchText(QWidget):
     """Text với hiệu ứng XÉ (tear/split) Cyberpunk"""
     
-    def __init__(self, text: str, color: str = "#00f0ff", size: int = 28, parent=None):
+    def __init__(self, text: str, color: str = "#00f0ff", size: int = 24, parent=None):
         super().__init__(parent)
         self.base_text = text
         self.base_color = QColor(color)
@@ -26,14 +26,14 @@ class TearGlitchText(QWidget):
         self.tear_active = False
         self.color_shift = 0
         
-        # Set minimum size based on font
-        self.setMinimumHeight(size + 16)
-        self.setMinimumWidth(len(text) * (size // 2) + 50)
+        # Set size dựa trên font
+        self.setMinimumHeight(size + 12)
+        self.setMinimumWidth(len(text) * (size // 2 + 2) + 20)
         
-        # Glitch timer
+        # Glitch timer - ít hơn để smooth hơn
         self.glitch_timer = QTimer(self)
         self.glitch_timer.timeout.connect(self._random_glitch)
-        self.glitch_timer.start(100)
+        self.glitch_timer.start(150)
         
         # Recovery timer
         self.recovery_timer = QTimer(self)
@@ -43,7 +43,7 @@ class TearGlitchText(QWidget):
         # Render timer
         self.render_timer = QTimer(self)
         self.render_timer.timeout.connect(self.update)
-        self.render_timer.start(50)
+        self.render_timer.start(60)
     
     def _random_glitch(self):
         """Random trigger glitch"""
@@ -355,7 +355,7 @@ class PulsingDot(QWidget):
 
 
 class NeonFlash(QWidget):
-    """Random neon flash effect"""
+    """Random neon flash effect - SUBTLE VERSION"""
     
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -369,19 +369,21 @@ class NeonFlash(QWidget):
         self.timer.timeout.connect(self._animate)
         self.timer.start(50)
         
+        # Flash ít hơn - mỗi 8 giây
         self.flash_timer = QTimer(self)
         self.flash_timer.timeout.connect(self._trigger_flash)
-        self.flash_timer.start(3000)
+        self.flash_timer.start(8000)
     
     def _trigger_flash(self):
-        if random.random() > 0.5:
-            self.flash_alpha = random.randint(10, 20)
+        # Chỉ 30% cơ hội flash và rất nhẹ
+        if random.random() > 0.7:
+            self.flash_alpha = random.randint(3, 8)  # Rất nhẹ
             colors = [QColor(0, 240, 255), QColor(255, 0, 168), QColor(0, 255, 102)]
             self.flash_color = random.choice(colors)
     
     def _animate(self):
         if self.flash_alpha > 0:
-            self.flash_alpha = max(0, self.flash_alpha - 3)
+            self.flash_alpha = max(0, self.flash_alpha - 1)
             self.update()
     
     def paintEvent(self, event):
