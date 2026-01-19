@@ -6,7 +6,11 @@ Handle communication with Hidemium Browser API
 import requests
 import json
 from typing import List, Dict, Optional, Any
-from config import API_CONFIG
+
+API_CONFIG = {
+    "hidemium_base_url": "http://127.0.0.1:52000",
+    "timeout": 30,
+}
 
 
 class HidemiumAPI:
