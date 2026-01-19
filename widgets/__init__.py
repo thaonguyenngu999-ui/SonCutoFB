@@ -4,6 +4,7 @@ FB Manager Pro - Widgets
 
 from .cyber_widgets import (
     CyberButton,
+    CyberButtonSmall,
     CyberInput,
     CyberComboBox,
     CyberCard,
@@ -12,6 +13,7 @@ from .cyber_widgets import (
     NavItem,
     CyberTerminal,
     CyberTable,
+    CyberCheckBox,
 )
 
 from .cyber_effects import (
@@ -25,6 +27,7 @@ from .cyber_effects import (
 
 __all__ = [
     "CyberButton",
+    "CyberButtonSmall",
     "CyberInput",
     "CyberComboBox",
     "CyberCard",
@@ -33,6 +36,7 @@ __all__ = [
     "NavItem",
     "CyberTerminal",
     "CyberTable",
+    "CyberCheckBox",
     "GlitchText",
     "ScanlineOverlay",
     "NeonRain",
