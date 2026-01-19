@@ -1,6 +1,6 @@
 """
 FB Manager Pro - Cyberpunk Widgets
-🐱 CUTE CAT Edition - FIXED 🐱
+🐱 CUTE CAT Edition - BEAUTIFUL 🐱
 """
 
 from PySide6.QtWidgets import (
@@ -73,35 +73,59 @@ class CyberButton(QPushButton):
         super().leaveEvent(event)
 
 
-class CyberButtonSmall(QPushButton):
-    """Button nhỏ cho table actions 🐱"""
+class ToggleButton(QPushButton):
+    """Toggle button Start/Stop 🐱"""
     
-    def __init__(self, text: str, variant: str = "success", parent=None):
-        super().__init__(text, parent)
+    toggled_state = Signal(bool)
+    
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.is_running = False
         self.setCursor(QCursor(Qt.PointingHandCursor))
-        self.setFixedSize(60, 26)
-        
-        colors = {
-            "success": COLORS["neon_mint"],
-            "danger": COLORS["neon_coral"],
-            "primary": COLORS["neon_cyan"],
-        }
-        self.color = colors.get(variant, COLORS["neon_mint"])
-        
-        self.setStyleSheet(f"""
-            QPushButton {{
-                background: transparent;
-                border: 2px solid {self.color};
-                border-radius: 6px;
-                color: {self.color};
-                font-size: 10px;
-                font-weight: bold;
-            }}
-            QPushButton:hover {{
-                background: {self.color};
-                color: #0c0c18;
-            }}
-        """)
+        self.setFixedSize(70, 28)
+        self._update_style()
+        self.clicked.connect(self._toggle)
+    
+    def _toggle(self):
+        self.is_running = not self.is_running
+        self._update_style()
+        self.toggled_state.emit(self.is_running)
+    
+    def _update_style(self):
+        if self.is_running:
+            self.setText("⏹ Stop")
+            self.setStyleSheet(f"""
+                QPushButton {{
+                    background: {COLORS['neon_coral']};
+                    border: none;
+                    border-radius: 8px;
+                    color: #0c0c18;
+                    font-size: 11px;
+                    font-weight: bold;
+                }}
+                QPushButton:hover {{
+                    background: {COLORS['neon_pink']};
+                }}
+            """)
+        else:
+            self.setText("▶ Start")
+            self.setStyleSheet(f"""
+                QPushButton {{
+                    background: {COLORS['neon_mint']};
+                    border: none;
+                    border-radius: 8px;
+                    color: #0c0c18;
+                    font-size: 11px;
+                    font-weight: bold;
+                }}
+                QPushButton:hover {{
+                    background: {COLORS['neon_cyan']};
+                }}
+            """)
+    
+    def set_running(self, running: bool):
+        self.is_running = running
+        self._update_style()
 
 
 class CyberInput(QLineEdit):
@@ -205,12 +229,12 @@ class CyberCard(QWidget):
 
 
 class CyberStatCard(QWidget):
-    """Stat card COMPACT - FIXED width 🐱"""
+    """Stat card COMPACT 🐱"""
     
     def __init__(self, label: str, value: str, icon: str = "😺", color: str = "pink", parent=None):
         super().__init__(parent)
         self.setFixedHeight(50)
-        self.setMinimumWidth(150)  # Đảm bảo đủ width
+        self.setMinimumWidth(150)
         
         color_map = {
             "pink": COLORS["neon_pink"],
@@ -458,7 +482,7 @@ class CyberTerminal(QWidget):
 
 
 class CyberTable(QTableWidget):
-    """Table với checkbox và action buttons 🐱"""
+    """Table với checkbox và toggle button 🐱"""
     
     def __init__(self, columns: list, parent=None):
         super().__init__(parent)
@@ -506,8 +530,8 @@ class CyberTable(QTableWidget):
         self.setShowGrid(False)
         self.setSelectionBehavior(QTableWidget.SelectRows)
     
-    def add_row_with_checkbox(self, data: list, row: int):
-        """Add row với checkbox ở đầu và buttons ở cuối"""
+    def add_row_with_widgets(self, data: list, row: int):
+        """Add row với checkbox và toggle button"""
         # Checkbox
         checkbox_widget = QWidget()
         checkbox_layout = QHBoxLayout(checkbox_widget)
@@ -523,17 +547,13 @@ class CyberTable(QTableWidget):
             item.setTextAlignment(Qt.AlignLeft | Qt.AlignVCenter)
             self.setItem(row, col + 1, item)
         
-        # Action buttons
+        # Toggle button
         action_widget = QWidget()
         action_layout = QHBoxLayout(action_widget)
-        action_layout.setContentsMargins(4, 4, 4, 4)
-        action_layout.setSpacing(6)
+        action_layout.setContentsMargins(8, 8, 8, 8)
+        action_layout.setAlignment(Qt.AlignCenter)
         
-        btn_start = CyberButtonSmall("▶ Start", "success")
-        btn_stop = CyberButtonSmall("⏹ Stop", "danger")
-        
-        action_layout.addWidget(btn_start)
-        action_layout.addWidget(btn_stop)
-        action_layout.addStretch()
+        toggle_btn = ToggleButton()
+        action_layout.addWidget(toggle_btn)
         
         self.setCellWidget(row, self.columnCount() - 1, action_widget)
