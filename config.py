@@ -1,15 +1,15 @@
 """
 FB Manager Pro - Configuration
-Cyberpunk 2077 Theme - BRIGHT EDITION
+Cyberpunk 2077 Theme - V3 BIGGER & BOLDER
 """
 
-# ========== COLORS - CYBERPUNK BRIGHT ==========
+# ========== COLORS ==========
 COLORS = {
-    # Background - sáng hơn, cyber hơn
-    "bg_dark": "#12142a",
-    "bg_darker": "#0d0f20",
-    "bg_card": "#1a1c38",
-    "bg_hover": "#252850",
+    # Background
+    "bg_dark": "#0a0a18",
+    "bg_darker": "#06060f",
+    "bg_card": "#0f0f22",
+    "bg_hover": "#1a1a35",
     
     # Neon colors
     "neon_cyan": "#00f0ff",
@@ -20,12 +20,12 @@ COLORS = {
     "neon_orange": "#ff6b00",
     "neon_red": "#ff003c",
     
-    # Text
+    # Text - BIGGER
     "text_primary": "#ffffff",
-    "text_secondary": "#d0d0e0",
-    "text_muted": "#9090b0",
-    "border": "#4a4a80",  # Sáng hơn, cyber hơn
-    "border_glow": "#6060a0",
+    "text_secondary": "#c0c0d8",
+    "text_muted": "#7878a0",
+    "border": "#2a2a50",
+    "border_bright": "#4040a0",
 }
 
 # ========== MENU ==========
@@ -40,28 +40,39 @@ MENU_ITEMS = [
     {"id": "posts", "icon": "📊", "text": "Bài đăng", "color": "green"},
 ]
 
+# ========== API ==========
+API_CONFIG = {
+    "hidemium_base_url": "http://127.0.0.1:52000",
+    "timeout": 30,
+}
+
 # ========== QSS STYLESHEET ==========
 CYBERPUNK_QSS = """
-/* ========== GLOBAL ========== */
+/* ========== GLOBAL - BIGGER FONTS ========== */
 * {
-    font-family: 'Segoe UI', 'Rajdhani', sans-serif;
+    font-family: 'Segoe UI', 'Arial', sans-serif;
 }
 
 QMainWindow, QWidget {
-    background-color: #0d0f20;
-    color: #e4e4e7;
+    background-color: #06060f;
+    color: #ffffff;
+    font-size: 14px;
+}
+
+QLabel {
+    font-size: 14px;
 }
 
 /* ========== SCROLLBAR ========== */
 QScrollBar:vertical {
-    background: #0d0f20;
-    width: 8px;
-    border-radius: 4px;
+    background: #0a0a18;
+    width: 10px;
+    border-radius: 5px;
 }
 
 QScrollBar::handle:vertical {
-    background: #3a3a60;
-    border-radius: 4px;
+    background: #2a2a50;
+    border-radius: 5px;
     min-height: 30px;
 }
 
@@ -73,66 +84,45 @@ QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
     height: 0;
 }
 
+QScrollBar:horizontal {
+    background: #0a0a18;
+    height: 10px;
+    border-radius: 5px;
+}
+
+QScrollBar::handle:horizontal {
+    background: #2a2a50;
+    border-radius: 5px;
+    min-width: 30px;
+}
+
+QScrollBar::handle:horizontal:hover {
+    background: #00f0ff;
+}
+
 /* ========== BUTTONS ========== */
 QPushButton {
     background: transparent;
     border: 2px solid #00f0ff;
-    border-radius: 6px;
     color: #00f0ff;
-    padding: 10px 20px;
+    padding: 12px 24px;
     font-weight: bold;
-    font-size: 11px;
+    font-size: 13px;
     letter-spacing: 1px;
 }
 
 QPushButton:hover {
     background: #00f0ff;
-    color: #0d0f20;
-}
-
-QPushButton:pressed {
-    background: #00c4cc;
-}
-
-QPushButton.success {
-    border-color: #00ff66;
-    color: #00ff66;
-}
-
-QPushButton.success:hover {
-    background: #00ff66;
-    color: #0d0f20;
-}
-
-QPushButton.danger {
-    border-color: #ff003c;
-    color: #ff003c;
-}
-
-QPushButton.danger:hover {
-    background: #ff003c;
-    color: #0d0f20;
-}
-
-QPushButton.ghost {
-    border-color: #5a5a80;
-    color: #b0b0c0;
-}
-
-QPushButton.ghost:hover {
-    border-color: #00f0ff;
-    color: #00f0ff;
-    background: transparent;
+    color: #06060f;
 }
 
 /* ========== INPUT ========== */
 QLineEdit, QTextEdit {
-    background: #0d0f20;
-    border: 2px solid #4a4a80;
-    border-radius: 6px;
-    padding: 10px 14px;
-    color: #e4e4e7;
-    font-size: 13px;
+    background: #0a0a18;
+    border: 2px solid #2a2a50;
+    padding: 12px 16px;
+    color: #ffffff;
+    font-size: 14px;
     selection-background-color: #00f0ff;
 }
 
@@ -140,18 +130,14 @@ QLineEdit:focus, QTextEdit:focus {
     border-color: #00f0ff;
 }
 
-QLineEdit::placeholder {
-    color: #6a6a90;
-}
-
 /* ========== COMBOBOX ========== */
 QComboBox {
-    background: #0d0f20;
-    border: 2px solid #4a4a80;
-    border-radius: 6px;
-    padding: 10px 14px;
-    color: #e4e4e7;
-    min-width: 150px;
+    background: #0a0a18;
+    border: 2px solid #2a2a50;
+    padding: 12px 16px;
+    color: #ffffff;
+    font-size: 14px;
+    min-width: 160px;
 }
 
 QComboBox:hover {
@@ -160,36 +146,67 @@ QComboBox:hover {
 
 QComboBox::drop-down {
     border: none;
-    width: 30px;
+    width: 35px;
 }
 
 QComboBox::down-arrow {
-    image: none;
-    border-left: 5px solid transparent;
-    border-right: 5px solid transparent;
-    border-top: 6px solid #00f0ff;
-    margin-right: 10px;
+    border-left: 6px solid transparent;
+    border-right: 6px solid transparent;
+    border-top: 8px solid #00f0ff;
 }
 
 QComboBox QAbstractItemView {
-    background: #12142a;
-    border: 2px solid #4a4a80;
-    selection-background-color: #252850;
-    outline: none;
+    background: #0f0f22;
+    border: 2px solid #2a2a50;
+    selection-background-color: #1a1a35;
+    font-size: 14px;
+}
+
+/* ========== TABLE ========== */
+QTableWidget {
+    background: transparent;
+    border: none;
+    gridline-color: #2a2a50;
+    font-size: 14px;
+}
+
+QTableWidget::item {
+    padding: 14px;
+    border-bottom: 1px solid #2a2a50;
+    color: #ffffff;
+}
+
+QTableWidget::item:selected {
+    background: rgba(0, 240, 255, 0.2);
+}
+
+QTableWidget::item:hover {
+    background: #1a1a35;
+}
+
+QHeaderView::section {
+    background: #0a0a18;
+    color: #00f0ff;
+    padding: 14px;
+    border: none;
+    border-bottom: 3px solid #00f0ff;
+    font-weight: bold;
+    font-size: 12px;
+    letter-spacing: 2px;
 }
 
 /* ========== CHECKBOX ========== */
 QCheckBox {
-    spacing: 8px;
-    color: #e4e4e7;
+    spacing: 10px;
+    color: #ffffff;
+    font-size: 14px;
 }
 
 QCheckBox::indicator {
-    width: 18px;
-    height: 18px;
-    border: 2px solid #4a4a80;
-    border-radius: 4px;
-    background: #0d0f20;
+    width: 22px;
+    height: 22px;
+    border: 2px solid #2a2a50;
+    background: #0a0a18;
 }
 
 QCheckBox::indicator:checked {
@@ -199,125 +216,5 @@ QCheckBox::indicator:checked {
 
 QCheckBox::indicator:hover {
     border-color: #00f0ff;
-}
-
-/* ========== TABLE ========== */
-QTableWidget {
-    background: transparent;
-    border: none;
-    gridline-color: #4a4a80;
-}
-
-QTableWidget::item {
-    padding: 12px;
-    border-bottom: 1px solid #4a4a80;
-}
-
-QTableWidget::item:selected {
-    background: rgba(0, 240, 255, 0.15);
-}
-
-QTableWidget::item:hover {
-    background: #252850;
-}
-
-QHeaderView::section {
-    background: rgba(0, 240, 255, 0.08);
-    color: #00f0ff;
-    padding: 12px;
-    border: none;
-    border-bottom: 2px solid #4a4a80;
-    font-weight: bold;
-    font-size: 10px;
-    letter-spacing: 2px;
-}
-
-/* ========== LABELS ========== */
-QLabel.title {
-    font-size: 32px;
-    font-weight: bold;
-    letter-spacing: 4px;
-}
-
-QLabel.subtitle {
-    color: #6a6a90;
-    font-size: 11px;
-    letter-spacing: 2px;
-}
-
-QLabel.neon-cyan { color: #00f0ff; }
-QLabel.neon-green { color: #00ff66; }
-QLabel.neon-magenta { color: #ff00a8; }
-QLabel.neon-purple { color: #bf00ff; }
-QLabel.neon-yellow { color: #fcee0a; }
-QLabel.neon-orange { color: #ff6b00; }
-
-/* ========== FRAMES ========== */
-QFrame.card {
-    background: #1a1c38;
-    border: 2px solid #4a4a80;
-    border-radius: 12px;
-}
-
-QFrame.card-header {
-    background: rgba(0, 240, 255, 0.05);
-    border-bottom: 2px solid #4a4a80;
-}
-
-/* ========== SIDEBAR ========== */
-QFrame#sidebar {
-    background: qlineargradient(y1:0, y2:1, stop:0 #12142a, stop:1 #0d0f20);
-    border-right: 2px solid qlineargradient(y1:0, y2:1, 
-        stop:0 #00f0ff, stop:0.5 #ff00a8, stop:1 #00f0ff);
-}
-
-/* ========== NAV ITEM ========== */
-QPushButton.nav-item {
-    background: transparent;
-    border: 1px solid transparent;
-    border-radius: 8px;
-    text-align: left;
-    padding: 12px 16px;
-    color: #b0b0c0;
-    font-weight: 600;
-}
-
-QPushButton.nav-item:hover {
-    background: rgba(0, 240, 255, 0.08);
-    color: #e4e4e7;
-    border-color: rgba(0, 240, 255, 0.3);
-}
-
-QPushButton.nav-item.active {
-    background: qlineargradient(x1:0, x2:1, stop:0 rgba(0,240,255,0.2), stop:1 transparent);
-    border-left: 3px solid #00f0ff;
-    color: #00f0ff;
-}
-
-/* ========== STAT CARD ========== */
-QFrame.stat-card {
-    background: qlineargradient(x1:0, y1:0, x2:1, y2:1, 
-        stop:0 rgba(26,28,56,0.9), stop:1 rgba(18,20,42,0.95));
-    border: 2px solid #4a4a80;
-    border-radius: 12px;
-}
-
-QFrame.stat-card:hover {
-    border-color: rgba(0, 240, 255, 0.5);
-}
-
-/* ========== TERMINAL ========== */
-QFrame#terminal {
-    background: rgba(10, 12, 25, 0.8);
-    border: 2px solid #4a4a80;
-    border-radius: 8px;
-}
-
-QTextEdit#terminal-text {
-    background: transparent;
-    border: none;
-    color: #e4e4e7;
-    font-family: 'Consolas', 'Share Tech Mono', monospace;
-    font-size: 11px;
 }
 """
