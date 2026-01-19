@@ -1,6 +1,6 @@
 """
 FB Manager Pro - Cyberpunk Widgets
-PySide6 UI Components - ENHANCED with bigger text
+PySide6 UI Components - FIXED VERSION
 """
 
 from PySide6.QtWidgets import (
@@ -17,7 +17,7 @@ from config import COLORS
 
 
 class CyberButton(QPushButton):
-    """Nút với hiệu ứng neon - ENHANCED"""
+    """Nút với hiệu ứng neon"""
     
     def __init__(self, text: str, variant: str = "primary", icon: str = None, parent=None):
         display_text = f"{icon}  {text}" if icon else text
@@ -27,14 +27,14 @@ class CyberButton(QPushButton):
         self.setCursor(QCursor(Qt.PointingHandCursor))
         
         colors = {
-            "primary": ("#00f0ff", "#0a0a14"),
-            "success": ("#00ff66", "#0a0a14"),
-            "danger": ("#ff003c", "#0a0a14"),
-            "warning": ("#fcee0a", "#0a0a14"),
-            "magenta": ("#ff00a8", "#0a0a14"),
-            "purple": ("#bf00ff", "#0a0a14"),
-            "orange": ("#ff6b00", "#0a0a14"),
-            "ghost": ("#6a6a7a", "transparent"),
+            "primary": ("#00f0ff", "#0d0f20"),
+            "success": ("#00ff66", "#0d0f20"),
+            "danger": ("#ff003c", "#0d0f20"),
+            "warning": ("#fcee0a", "#0d0f20"),
+            "magenta": ("#ff00a8", "#0d0f20"),
+            "purple": ("#bf00ff", "#0d0f20"),
+            "orange": ("#ff6b00", "#0d0f20"),
+            "ghost": ("#7a7aa0", "transparent"),
         }
         
         self.color, self.bg = colors.get(variant, colors["primary"])
@@ -61,7 +61,7 @@ class CyberButton(QPushButton):
             }}
             QPushButton:hover {{
                 background: {self.color};
-                color: #0a0a14;
+                color: #0d0f20;
             }}
         """)
     
@@ -75,7 +75,7 @@ class CyberButton(QPushButton):
 
 
 class CyberInput(QLineEdit):
-    """Input với style neon - bigger text"""
+    """Input với style neon"""
     
     def __init__(self, placeholder: str = "", parent=None):
         super().__init__(parent)
@@ -85,9 +85,9 @@ class CyberInput(QLineEdit):
                 background: {COLORS['bg_darker']};
                 border: 2px solid {COLORS['border']};
                 border-radius: 8px;
-                padding: 14px 18px;
+                padding: 12px 16px;
                 color: {COLORS['text_primary']};
-                font-size: 14px;
+                font-size: 13px;
                 font-family: 'Consolas', 'Courier New', monospace;
             }}
             QLineEdit:focus {{
@@ -98,7 +98,7 @@ class CyberInput(QLineEdit):
 
 
 class CyberComboBox(QComboBox):
-    """Dropdown với style neon - bigger"""
+    """Dropdown với style neon"""
     
     def __init__(self, items: list = None, parent=None):
         super().__init__(parent)
@@ -110,9 +110,9 @@ class CyberComboBox(QComboBox):
                 background: {COLORS['bg_darker']};
                 border: 2px solid {COLORS['border']};
                 border-radius: 8px;
-                padding: 12px 18px;
+                padding: 10px 16px;
                 color: {COLORS['text_primary']};
-                font-size: 14px;
+                font-size: 13px;
                 min-width: 160px;
             }}
             QComboBox:hover {{
@@ -131,7 +131,7 @@ class CyberComboBox(QComboBox):
                 background: {COLORS['bg_card']};
                 border: 2px solid {COLORS['border']};
                 selection-background-color: {COLORS['bg_hover']};
-                font-size: 14px;
+                font-size: 13px;
             }}
         """)
 
@@ -144,14 +144,14 @@ class CyberCard(QFrame):
         self.setStyleSheet(f"""
             QFrame {{
                 background: {COLORS['bg_card']};
-                border: 1px solid {COLORS['border']};
+                border: 2px solid {COLORS['border']};
                 border-radius: 12px;
             }}
         """)
 
 
 class CyberStatCard(QFrame):
-    """Stat card - ENHANCED"""
+    """Stat card với border sáng"""
     
     def __init__(self, label: str, value: str, change: str = "", color: str = "cyan", parent=None):
         super().__init__(parent)
@@ -161,12 +161,12 @@ class CyberStatCard(QFrame):
         self.setStyleSheet(f"""
             QFrame {{
                 background: qlineargradient(x1:0, y1:0, x2:1, y2:1, 
-                    stop:0 rgba(15,15,26,0.9), stop:1 rgba(10,10,20,0.95));
-                border: 1px solid {COLORS['border']};
+                    stop:0 rgba(26,28,56,0.9), stop:1 rgba(18,20,42,0.95));
+                border: 2px solid {COLORS['border']};
                 border-radius: 12px;
             }}
             QFrame:hover {{
-                border-color: {neon_color}60;
+                border-color: {neon_color}80;
             }}
         """)
         
@@ -174,7 +174,7 @@ class CyberStatCard(QFrame):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
         
-        # Accent bar - thicker
+        # Accent bar
         accent = QFrame()
         accent.setFixedHeight(4)
         accent.setStyleSheet(f"background: {neon_color}; border-radius: 0;")
@@ -183,23 +183,23 @@ class CyberStatCard(QFrame):
         # Content
         content = QWidget()
         content_layout = QVBoxLayout(content)
-        content_layout.setContentsMargins(24, 20, 24, 20)
+        content_layout.setContentsMargins(20, 16, 20, 16)
         
         # Label
         lbl = QLabel(label)
-        lbl.setStyleSheet(f"color: {COLORS['text_muted']}; font-size: 11px; font-weight: bold; letter-spacing: 2px;")
+        lbl.setStyleSheet(f"color: {COLORS['text_muted']}; font-size: 10px; font-weight: bold; letter-spacing: 2px;")
         content_layout.addWidget(lbl)
         
-        # Value - bigger
+        # Value
         self.value_label = QLabel(value)
-        self.value_label.setStyleSheet(f"color: {neon_color}; font-size: 42px; font-weight: bold;")
+        self.value_label.setStyleSheet(f"color: {neon_color}; font-size: 36px; font-weight: bold;")
         content_layout.addWidget(self.value_label)
         
         # Change
         if change:
             chg = QLabel(change)
             color_change = COLORS['neon_green'] if '+' in change or '▲' in change else COLORS['text_secondary']
-            chg.setStyleSheet(f"color: {color_change}; font-size: 12px;")
+            chg.setStyleSheet(f"color: {color_change}; font-size: 11px;")
             content_layout.addWidget(chg)
         
         layout.addWidget(content)
@@ -209,7 +209,7 @@ class CyberStatCard(QFrame):
 
 
 class CyberTitle(QWidget):
-    """Title với glitch effect - ENHANCED"""
+    """Title với glitch effect - SIZE FIXED"""
     
     def __init__(self, title: str, subtitle: str = "", color: str = "cyan", parent=None):
         super().__init__(parent)
@@ -217,42 +217,47 @@ class CyberTitle(QWidget):
         neon_color = COLORS.get(f"neon_{color}", COLORS["neon_cyan"])
         
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(0, 0, 0, 28)
+        layout.setContentsMargins(0, 0, 0, 20)
         
         title_row = QHBoxLayout()
-        title_row.setSpacing(20)
+        title_row.setSpacing(16)
         
-        # Accent - bigger
+        # Accent
         accent = QLabel("◢")
-        accent.setStyleSheet(f"color: {neon_color}; font-size: 48px;")
+        accent.setStyleSheet(f"color: {neon_color}; font-size: 32px;")
         title_row.addWidget(accent)
         
         # Title container
         title_container = QVBoxLayout()
-        title_container.setSpacing(10)
+        title_container.setSpacing(6)
         
-        # Top line - thicker
+        # Top line
         top_line = QFrame()
-        top_line.setFixedHeight(3)
+        top_line.setFixedHeight(2)
         top_line.setStyleSheet(f"background: qlineargradient(x1:0, x2:1, stop:0 {neon_color}, stop:1 transparent);")
         title_container.addWidget(top_line)
         
-        # Title - bigger
-        from widgets.cyber_effects import GlitchText
-        title_label = GlitchText(title.upper(), neon_color, size=48)
+        # Title - SỬ DỤNG QLABEL THAY VÌ GLITCHTEXT ĐỂ TRÁNH LỖI
+        title_label = QLabel(title.upper())
+        title_label.setStyleSheet(f"""
+            color: {neon_color};
+            font-size: 28px;
+            font-weight: bold;
+            letter-spacing: 4px;
+        """)
         title_container.addWidget(title_label)
         
         # Bottom line
         bottom_line = QFrame()
-        bottom_line.setFixedHeight(3)
-        bottom_line.setMaximumWidth(250)
+        bottom_line.setFixedHeight(2)
+        bottom_line.setMaximumWidth(200)
         bottom_line.setStyleSheet(f"background: qlineargradient(x1:0, x2:1, stop:0 {neon_color}, stop:1 transparent);")
         title_container.addWidget(bottom_line)
         
-        # Subtitle - bigger
+        # Subtitle
         if subtitle:
             sub = QLabel(f"// {subtitle}")
-            sub.setStyleSheet(f"color: {COLORS['text_secondary']}; font-size: 13px; letter-spacing: 2px; margin-top: 14px;")
+            sub.setStyleSheet(f"color: {COLORS['text_secondary']}; font-size: 12px; letter-spacing: 2px; margin-top: 8px;")
             title_container.addWidget(sub)
         
         title_row.addLayout(title_container)
@@ -262,7 +267,7 @@ class CyberTitle(QWidget):
 
 
 class NavItem(QPushButton):
-    """Navigation item - bigger text"""
+    """Navigation item"""
     
     clicked_nav = Signal(str)
     
@@ -273,7 +278,7 @@ class NavItem(QPushButton):
         self.neon_color = COLORS.get(f"neon_{color}", COLORS["neon_cyan"])
         self.is_active = False
         
-        self.setFixedHeight(48)
+        self.setFixedHeight(44)
         self.setCursor(QCursor(Qt.PointingHandCursor))
         self._apply_style()
         
@@ -283,14 +288,14 @@ class NavItem(QPushButton):
         if self.is_active:
             self.setStyleSheet(f"""
                 QPushButton {{
-                    background: qlineargradient(x1:0, x2:1, stop:0 {self.neon_color}30, stop:1 transparent);
+                    background: qlineargradient(x1:0, x2:1, stop:0 {self.neon_color}40, stop:1 transparent);
                     border: none;
                     border-left: 4px solid {self.neon_color};
                     text-align: left;
-                    padding-left: 18px;
+                    padding-left: 16px;
                     color: {self.neon_color};
                     font-weight: bold;
-                    font-size: 15px;
+                    font-size: 14px;
                 }}
             """)
         else:
@@ -300,10 +305,10 @@ class NavItem(QPushButton):
                     border: none;
                     border-left: 4px solid transparent;
                     text-align: left;
-                    padding-left: 18px;
+                    padding-left: 16px;
                     color: {COLORS['text_secondary']};
                     font-weight: 600;
-                    font-size: 15px;
+                    font-size: 14px;
                 }}
                 QPushButton:hover {{
                     background: {COLORS['bg_hover']};
@@ -317,21 +322,21 @@ class NavItem(QPushButton):
 
 
 class CyberTerminal(QFrame):
-    """Terminal log - bigger text"""
+    """Terminal log"""
     
     def __init__(self, parent=None):
         super().__init__(parent)
         
         self.setStyleSheet(f"""
             QFrame {{
-                background: rgba(6, 6, 12, 0.8);
+                background: rgba(10, 12, 25, 0.9);
                 border: 2px solid {COLORS['border']};
                 border-radius: 10px;
             }}
         """)
         
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(14, 14, 14, 14)
+        layout.setContentsMargins(12, 12, 12, 12)
         
         self.text_area = QTextEdit()
         self.text_area.setReadOnly(True)
@@ -341,7 +346,7 @@ class CyberTerminal(QFrame):
                 border: none;
                 color: {COLORS['text_primary']};
                 font-family: 'Consolas', 'Courier New', monospace;
-                font-size: 13px;
+                font-size: 12px;
             }}
         """)
         layout.addWidget(self.text_area)
@@ -361,7 +366,7 @@ class CyberTerminal(QFrame):
         color = colors.get(level, colors["info"])
         icon = icons.get(level, "ℹ")
         
-        html = f'<div style="margin: 4px 0;"><span style="color:{COLORS["text_muted"]}">{timestamp}</span> '
+        html = f'<div style="margin: 3px 0;"><span style="color:{COLORS["text_muted"]}">{timestamp}</span> '
         html += f'<span style="color:{color}; font-weight: bold;">{icon} {message}</span></div>'
         
         self.text_area.insertHtml(html)
@@ -373,7 +378,7 @@ class CyberTerminal(QFrame):
 
 
 class CyberTable(QTableWidget):
-    """Table - bigger text"""
+    """Table với border sáng"""
     
     def __init__(self, columns: list, parent=None):
         super().__init__(parent)
@@ -386,27 +391,27 @@ class CyberTable(QTableWidget):
                 background: transparent;
                 border: none;
                 gridline-color: {COLORS['border']};
-                font-size: 14px;
+                font-size: 13px;
             }}
             QTableWidget::item {{
-                padding: 14px;
+                padding: 12px;
                 border-bottom: 1px solid {COLORS['border']};
                 color: {COLORS['text_primary']};
             }}
             QTableWidget::item:selected {{
-                background: rgba(0, 240, 255, 0.15);
+                background: rgba(0, 240, 255, 0.2);
             }}
             QTableWidget::item:hover {{
                 background: {COLORS['bg_hover']};
             }}
             QHeaderView::section {{
-                background: rgba(0, 240, 255, 0.08);
+                background: rgba(0, 240, 255, 0.1);
                 color: {COLORS['neon_cyan']};
-                padding: 14px;
+                padding: 12px;
                 border: none;
                 border-bottom: 2px solid {COLORS['border']};
                 font-weight: bold;
-                font-size: 12px;
+                font-size: 11px;
                 letter-spacing: 2px;
             }}
         """)
