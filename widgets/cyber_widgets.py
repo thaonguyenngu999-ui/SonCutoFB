@@ -209,7 +209,7 @@ class CyberStatCard(QFrame):
 
 
 class CyberTitle(QWidget):
-    """Title với glitch effect - SIZE FIXED"""
+    """Title với glitch effect - FIXED SIZE"""
     
     def __init__(self, title: str, subtitle: str = "", color: str = "cyan", parent=None):
         super().__init__(parent)
@@ -220,16 +220,16 @@ class CyberTitle(QWidget):
         layout.setContentsMargins(0, 0, 0, 20)
         
         title_row = QHBoxLayout()
-        title_row.setSpacing(16)
+        title_row.setSpacing(14)
         
         # Accent
         accent = QLabel("◢")
-        accent.setStyleSheet(f"color: {neon_color}; font-size: 32px;")
+        accent.setStyleSheet(f"color: {neon_color}; font-size: 28px;")
         title_row.addWidget(accent)
         
         # Title container
         title_container = QVBoxLayout()
-        title_container.setSpacing(6)
+        title_container.setSpacing(4)
         
         # Top line
         top_line = QFrame()
@@ -237,27 +237,23 @@ class CyberTitle(QWidget):
         top_line.setStyleSheet(f"background: qlineargradient(x1:0, x2:1, stop:0 {neon_color}, stop:1 transparent);")
         title_container.addWidget(top_line)
         
-        # Title - SỬ DỤNG QLABEL THAY VÌ GLITCHTEXT ĐỂ TRÁNH LỖI
-        title_label = QLabel(title.upper())
-        title_label.setStyleSheet(f"""
-            color: {neon_color};
-            font-size: 28px;
-            font-weight: bold;
-            letter-spacing: 4px;
-        """)
+        # Title - SỬ DỤNG GLITCHTEXT với size nhỏ hơn
+        from .cyber_effects import GlitchText
+        title_label = GlitchText(title.upper(), neon_color, size=24)
+        title_label.setFixedHeight(40)
         title_container.addWidget(title_label)
         
         # Bottom line
         bottom_line = QFrame()
         bottom_line.setFixedHeight(2)
-        bottom_line.setMaximumWidth(200)
+        bottom_line.setMaximumWidth(180)
         bottom_line.setStyleSheet(f"background: qlineargradient(x1:0, x2:1, stop:0 {neon_color}, stop:1 transparent);")
         title_container.addWidget(bottom_line)
         
         # Subtitle
         if subtitle:
             sub = QLabel(f"// {subtitle}")
-            sub.setStyleSheet(f"color: {COLORS['text_secondary']}; font-size: 12px; letter-spacing: 2px; margin-top: 8px;")
+            sub.setStyleSheet(f"color: {COLORS['text_secondary']}; font-size: 11px; letter-spacing: 2px; margin-top: 6px;")
             title_container.addWidget(sub)
         
         title_row.addLayout(title_container)
