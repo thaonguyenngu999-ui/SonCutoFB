@@ -1,6 +1,6 @@
 """
 FB Manager Pro - Cyberpunk Widgets
-PySide6 UI Components - CYBERPUNK BORDERS
+V3 - BIGGER TEXT & CYBERPUNK BORDERS
 """
 
 from PySide6.QtWidgets import (
@@ -9,15 +9,72 @@ from PySide6.QtWidgets import (
     QTableWidget, QTableWidgetItem, QHeaderView, QCheckBox, QSizePolicy
 )
 from PySide6.QtCore import Qt, Signal, QTimer, QPropertyAnimation, QEasingCurve
-from PySide6.QtGui import QColor, QFont, QCursor, QPainter, QPen, QLinearGradient
+from PySide6.QtGui import QColor, QFont, QCursor, QPainter, QPen, QBrush, QLinearGradient, QPainterPath
 
 import sys
 sys.path.insert(0, str(__file__).rsplit('/', 2)[0])
 from config import COLORS
 
 
+class CyberFrame(QFrame):
+    """Frame với CYBERPUNK corner cuts"""
+    
+    def __init__(self, glow_color: str = None, parent=None):
+        super().__init__(parent)
+        self.glow_color = QColor(glow_color) if glow_color else QColor(COLORS['neon_cyan'])
+        self.corner_size = 12
+        self.setAttribute(Qt.WA_StyledBackground, True)
+        
+    def paintEvent(self, event):
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.Antialiasing)
+        
+        w, h = self.width(), self.height()
+        cs = self.corner_size
+        
+        # Path với corner cuts
+        path = QPainterPath()
+        path.moveTo(cs, 0)
+        path.lineTo(w - cs, 0)
+        path.lineTo(w, cs)
+        path.lineTo(w, h - cs)
+        path.lineTo(w - cs, h)
+        path.lineTo(cs, h)
+        path.lineTo(0, h - cs)
+        path.lineTo(0, cs)
+        path.closeSubpath()
+        
+        # Fill
+        painter.fillPath(path, QColor(COLORS['bg_card']))
+        
+        # Border gradient
+        gradient = QLinearGradient(0, 0, w, h)
+        gradient.setColorAt(0, self.glow_color)
+        gradient.setColorAt(0.5, QColor(self.glow_color.red(), self.glow_color.green(), self.glow_color.blue(), 100))
+        gradient.setColorAt(1, self.glow_color)
+        
+        pen = QPen(QBrush(gradient), 2)
+        painter.setPen(pen)
+        painter.drawPath(path)
+        
+        # Corner accents
+        painter.setPen(QPen(self.glow_color, 3))
+        # Top-left
+        painter.drawLine(0, cs, 0, cs + 15)
+        painter.drawLine(cs, 0, cs + 15, 0)
+        # Top-right  
+        painter.drawLine(w, cs, w, cs + 15)
+        painter.drawLine(w - cs, 0, w - cs - 15, 0)
+        # Bottom-left
+        painter.drawLine(0, h - cs, 0, h - cs - 15)
+        painter.drawLine(cs, h, cs + 15, h)
+        # Bottom-right
+        painter.drawLine(w, h - cs, w, h - cs - 15)
+        painter.drawLine(w - cs, h, w - cs - 15, h)
+
+
 class CyberButton(QPushButton):
-    """Nút với hiệu ứng neon - CYBERPUNK"""
+    """Button CYBERPUNK với glow"""
     
     def __init__(self, text: str, variant: str = "primary", icon: str = None, parent=None):
         display_text = f"{icon}  {text}" if icon else text
@@ -25,22 +82,23 @@ class CyberButton(QPushButton):
         
         self.variant = variant
         self.setCursor(QCursor(Qt.PointingHandCursor))
+        self.setMinimumHeight(42)
         
         colors = {
-            "primary": ("#00f0ff", "#0d0f20"),
-            "success": ("#00ff66", "#0d0f20"),
-            "danger": ("#ff003c", "#0d0f20"),
-            "warning": ("#fcee0a", "#0d0f20"),
-            "magenta": ("#ff00a8", "#0d0f20"),
-            "purple": ("#bf00ff", "#0d0f20"),
-            "orange": ("#ff6b00", "#0d0f20"),
-            "ghost": ("#7a7aa0", "transparent"),
+            "primary": COLORS["neon_cyan"],
+            "success": COLORS["neon_green"],
+            "danger": COLORS["neon_red"],
+            "warning": COLORS["neon_yellow"],
+            "magenta": COLORS["neon_magenta"],
+            "purple": COLORS["neon_purple"],
+            "orange": COLORS["neon_orange"],
+            "ghost": COLORS["text_muted"],
         }
         
-        self.color, self.bg = colors.get(variant, colors["primary"])
+        self.color = colors.get(variant, colors["primary"])
         self._apply_style()
         
-        # Glow effect
+        # Glow
         self.glow = QGraphicsDropShadowEffect(self)
         self.glow.setBlurRadius(0)
         self.glow.setColor(QColor(self.color))
@@ -52,21 +110,23 @@ class CyberButton(QPushButton):
             QPushButton {{
                 background: transparent;
                 border: 2px solid {self.color};
-                border-radius: 4px;
                 color: {self.color};
-                padding: 10px 20px;
+                padding: 12px 28px;
                 font-weight: bold;
-                font-size: 11px;
-                letter-spacing: 1px;
+                font-size: 13px;
+                letter-spacing: 2px;
             }}
             QPushButton:hover {{
                 background: {self.color};
-                color: #0d0f20;
+                color: #06060f;
+            }}
+            QPushButton:pressed {{
+                background: {self.color}cc;
             }}
         """)
     
     def enterEvent(self, event):
-        self.glow.setBlurRadius(20)
+        self.glow.setBlurRadius(25)
         super().enterEvent(event)
     
     def leaveEvent(self, event):
@@ -75,148 +135,207 @@ class CyberButton(QPushButton):
 
 
 class CyberInput(QLineEdit):
-    """Input với style neon cyberpunk"""
+    """Input CYBERPUNK - BIGGER"""
     
     def __init__(self, placeholder: str = "", parent=None):
         super().__init__(parent)
         self.setPlaceholderText(placeholder)
+        self.setMinimumHeight(46)
         self.setStyleSheet(f"""
             QLineEdit {{
                 background: {COLORS['bg_darker']};
                 border: 2px solid {COLORS['border']};
                 border-left: 4px solid {COLORS['neon_cyan']};
-                border-radius: 2px;
-                padding: 10px 14px;
+                padding: 12px 18px;
                 color: {COLORS['text_primary']};
-                font-size: 13px;
-                font-family: 'Consolas', 'Courier New', monospace;
+                font-size: 15px;
+                font-family: 'Consolas', monospace;
             }}
             QLineEdit:focus {{
                 border-color: {COLORS['neon_cyan']};
                 background: {COLORS['bg_card']};
             }}
+            QLineEdit::placeholder {{
+                color: {COLORS['text_muted']};
+            }}
         """)
 
 
 class CyberComboBox(QComboBox):
-    """Dropdown với style cyberpunk"""
+    """Dropdown CYBERPUNK - BIGGER"""
     
     def __init__(self, items: list = None, parent=None):
         super().__init__(parent)
         if items:
             self.addItems(items)
+        self.setMinimumHeight(46)
         
         self.setStyleSheet(f"""
             QComboBox {{
                 background: {COLORS['bg_darker']};
                 border: 2px solid {COLORS['border']};
                 border-left: 4px solid {COLORS['neon_purple']};
-                border-radius: 2px;
-                padding: 10px 14px;
+                padding: 12px 18px;
                 color: {COLORS['text_primary']};
-                font-size: 12px;
-                min-width: 150px;
+                font-size: 14px;
+                min-width: 180px;
             }}
             QComboBox:hover {{
                 border-color: {COLORS['neon_cyan']};
             }}
             QComboBox::drop-down {{
                 border: none;
-                width: 30px;
+                width: 40px;
             }}
             QComboBox::down-arrow {{
-                border-left: 5px solid transparent;
-                border-right: 5px solid transparent;
-                border-top: 6px solid {COLORS['neon_cyan']};
+                border-left: 7px solid transparent;
+                border-right: 7px solid transparent;
+                border-top: 9px solid {COLORS['neon_cyan']};
             }}
             QComboBox QAbstractItemView {{
                 background: {COLORS['bg_card']};
                 border: 2px solid {COLORS['border']};
                 selection-background-color: {COLORS['bg_hover']};
-                font-size: 12px;
+                font-size: 14px;
+                padding: 6px;
             }}
         """)
 
 
-class CyberCard(QFrame):
-    """Card container với CYBERPUNK border"""
+class CyberCard(QWidget):
+    """Card với CYBERPUNK corner cuts và glow"""
     
     def __init__(self, glow_color: str = None, parent=None):
         super().__init__(parent)
-        color = glow_color or COLORS['neon_cyan']
-        
-        self.setStyleSheet(f"""
-            QFrame {{
-                background: {COLORS['bg_card']};
-                border: 2px solid {COLORS['border']};
-                border-top: 3px solid {color};
-                border-radius: 4px;
-            }}
-        """)
+        self.glow_color = QColor(glow_color) if glow_color else QColor(COLORS['neon_cyan'])
+        self.corner_size = 15
         
         # Glow effect
         glow = QGraphicsDropShadowEffect(self)
-        glow.setBlurRadius(15)
-        glow.setColor(QColor(color))
+        glow.setBlurRadius(20)
+        glow.setColor(self.glow_color)
         glow.setOffset(0, 0)
         self.setGraphicsEffect(glow)
+        
+    def paintEvent(self, event):
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.Antialiasing)
+        
+        w, h = self.width(), self.height()
+        cs = self.corner_size
+        
+        # Path với corner cuts
+        path = QPainterPath()
+        path.moveTo(cs, 0)
+        path.lineTo(w - cs, 0)
+        path.lineTo(w, cs)
+        path.lineTo(w, h - cs)
+        path.lineTo(w - cs, h)
+        path.lineTo(cs, h)
+        path.lineTo(0, h - cs)
+        path.lineTo(0, cs)
+        path.closeSubpath()
+        
+        # Fill gradient
+        gradient = QLinearGradient(0, 0, 0, h)
+        gradient.setColorAt(0, QColor(COLORS['bg_card']))
+        gradient.setColorAt(1, QColor(COLORS['bg_darker']))
+        painter.fillPath(path, gradient)
+        
+        # Border
+        pen = QPen(self.glow_color, 2)
+        painter.setPen(pen)
+        painter.drawPath(path)
+        
+        # Top accent line
+        painter.setPen(QPen(self.glow_color, 4))
+        painter.drawLine(cs + 5, 0, min(w // 3, 150), 0)
 
 
-class CyberStatCard(QFrame):
-    """Stat card với CYBERPUNK style"""
+class CyberStatCard(QWidget):
+    """Stat card CYBERPUNK - BIGGER"""
     
     def __init__(self, label: str, value: str, change: str = "", color: str = "cyan", parent=None):
         super().__init__(parent)
         
-        neon_color = COLORS.get(f"neon_{color}", COLORS["neon_cyan"])
-        
-        self.setStyleSheet(f"""
-            QFrame {{
-                background: qlineargradient(x1:0, y1:0, x2:0, y2:1, 
-                    stop:0 {COLORS['bg_card']}, stop:1 {COLORS['bg_darker']});
-                border: 2px solid {COLORS['border']};
-                border-left: 4px solid {neon_color};
-                border-radius: 4px;
-            }}
-            QFrame:hover {{
-                border-color: {neon_color};
-            }}
-        """)
+        self.neon_color = QColor(COLORS.get(f"neon_{color}", COLORS["neon_cyan"]))
+        self.corner_size = 10
         
         # Glow
         glow = QGraphicsDropShadowEffect(self)
-        glow.setBlurRadius(10)
-        glow.setColor(QColor(neon_color))
+        glow.setBlurRadius(15)
+        glow.setColor(self.neon_color)
         glow.setOffset(0, 0)
         self.setGraphicsEffect(glow)
         
+        # Layout
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(18, 14, 18, 14)
-        layout.setSpacing(4)
+        layout.setContentsMargins(22, 18, 22, 18)
+        layout.setSpacing(6)
         
-        # Label
+        # Label - BIGGER
         lbl = QLabel(label)
-        lbl.setStyleSheet(f"color: {COLORS['text_muted']}; font-size: 9px; font-weight: bold; letter-spacing: 2px;")
+        lbl.setStyleSheet(f"""
+            color: {COLORS['text_muted']}; 
+            font-size: 12px; 
+            font-weight: bold; 
+            letter-spacing: 3px;
+        """)
         layout.addWidget(lbl)
         
-        # Value
+        # Value - BIGGER
         self.value_label = QLabel(value)
-        self.value_label.setStyleSheet(f"color: {neon_color}; font-size: 32px; font-weight: bold;")
+        self.value_label.setStyleSheet(f"""
+            color: {self.neon_color.name()}; 
+            font-size: 42px; 
+            font-weight: bold;
+        """)
         layout.addWidget(self.value_label)
         
         # Change
         if change:
             chg = QLabel(change)
-            color_change = COLORS['neon_green'] if '+' in change or '▲' in change else COLORS['text_secondary']
-            chg.setStyleSheet(f"color: {color_change}; font-size: 10px;")
+            chg_color = COLORS['neon_green'] if '+' in change or '▲' in change else COLORS['text_secondary']
+            chg.setStyleSheet(f"color: {chg_color}; font-size: 13px;")
             layout.addWidget(chg)
     
     def set_value(self, value: str):
         self.value_label.setText(value)
+        
+    def paintEvent(self, event):
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.Antialiasing)
+        
+        w, h = self.width(), self.height()
+        cs = self.corner_size
+        
+        # Path
+        path = QPainterPath()
+        path.moveTo(cs, 0)
+        path.lineTo(w, 0)
+        path.lineTo(w, h - cs)
+        path.lineTo(w - cs, h)
+        path.lineTo(0, h)
+        path.lineTo(0, cs)
+        path.closeSubpath()
+        
+        # Fill
+        gradient = QLinearGradient(0, 0, w, h)
+        gradient.setColorAt(0, QColor(COLORS['bg_card']))
+        gradient.setColorAt(1, QColor(COLORS['bg_darker']))
+        painter.fillPath(path, gradient)
+        
+        # Border
+        painter.setPen(QPen(QColor(COLORS['border']), 2))
+        painter.drawPath(path)
+        
+        # Left accent
+        painter.setPen(QPen(self.neon_color, 4))
+        painter.drawLine(0, cs + 5, 0, h - 5)
 
 
 class CyberTitle(QWidget):
-    """Title với glitch effect - CYBERPUNK"""
+    """Title với GlitchText - CYBERPUNK"""
     
     def __init__(self, title: str, subtitle: str = "", color: str = "cyan", parent=None):
         super().__init__(parent)
@@ -224,14 +343,14 @@ class CyberTitle(QWidget):
         neon_color = COLORS.get(f"neon_{color}", COLORS["neon_cyan"])
         
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(0, 0, 0, 16)
+        layout.setContentsMargins(0, 0, 0, 20)
         
         title_row = QHBoxLayout()
-        title_row.setSpacing(12)
+        title_row.setSpacing(16)
         
-        # Corner accent
+        # Corner accent - BIGGER
         corner = QFrame()
-        corner.setFixedSize(8, 40)
+        corner.setFixedSize(10, 50)
         corner.setStyleSheet(f"""
             background: qlineargradient(y1:0, y2:1, 
                 stop:0 {neon_color}, stop:1 transparent);
@@ -240,32 +359,32 @@ class CyberTitle(QWidget):
         
         # Title container
         title_container = QVBoxLayout()
-        title_container.setSpacing(2)
+        title_container.setSpacing(4)
         
-        # Top line
+        # Top line - LONGER
         top_line = QFrame()
-        top_line.setFixedHeight(2)
-        top_line.setMaximumWidth(300)
+        top_line.setFixedHeight(3)
+        top_line.setMaximumWidth(400)
         top_line.setStyleSheet(f"background: qlineargradient(x1:0, x2:1, stop:0 {neon_color}, stop:1 transparent);")
         title_container.addWidget(top_line)
         
-        # Title với GlitchText
+        # Title với GlitchText - SIZE 26
         from .cyber_effects import GlitchText
-        title_label = GlitchText(title.upper(), neon_color, size=22)
-        title_label.setFixedHeight(36)
+        title_label = GlitchText(title.upper(), neon_color, size=26)
+        title_label.setFixedHeight(44)
         title_container.addWidget(title_label)
         
         # Bottom line
         bottom_line = QFrame()
-        bottom_line.setFixedHeight(2)
-        bottom_line.setMaximumWidth(150)
+        bottom_line.setFixedHeight(3)
+        bottom_line.setMaximumWidth(200)
         bottom_line.setStyleSheet(f"background: qlineargradient(x1:0, x2:1, stop:0 {neon_color}, stop:1 transparent);")
         title_container.addWidget(bottom_line)
         
-        # Subtitle
+        # Subtitle - BIGGER
         if subtitle:
             sub = QLabel(f"// {subtitle}")
-            sub.setStyleSheet(f"color: {COLORS['text_muted']}; font-size: 10px; letter-spacing: 2px; margin-top: 4px;")
+            sub.setStyleSheet(f"color: {COLORS['text_secondary']}; font-size: 14px; letter-spacing: 2px; margin-top: 6px;")
             title_container.addWidget(sub)
         
         title_row.addLayout(title_container)
@@ -275,18 +394,18 @@ class CyberTitle(QWidget):
 
 
 class NavItem(QPushButton):
-    """Navigation item - CYBERPUNK"""
+    """Navigation item - BIGGER"""
     
     clicked_nav = Signal(str)
     
     def __init__(self, text: str, icon: str, tab_id: str, color: str = "cyan", parent=None):
-        super().__init__(f"  {icon}   {text}", parent)
+        super().__init__(f"  {icon}    {text}", parent)
         
         self.tab_id = tab_id
         self.neon_color = COLORS.get(f"neon_{color}", COLORS["neon_cyan"])
         self.is_active = False
         
-        self.setFixedHeight(42)
+        self.setFixedHeight(50)
         self.setCursor(QCursor(Qt.PointingHandCursor))
         self._apply_style()
         
@@ -296,14 +415,14 @@ class NavItem(QPushButton):
         if self.is_active:
             self.setStyleSheet(f"""
                 QPushButton {{
-                    background: qlineargradient(x1:0, x2:1, stop:0 {self.neon_color}40, stop:1 transparent);
+                    background: qlineargradient(x1:0, x2:1, stop:0 {self.neon_color}50, stop:1 transparent);
                     border: none;
-                    border-left: 3px solid {self.neon_color};
+                    border-left: 4px solid {self.neon_color};
                     text-align: left;
-                    padding-left: 14px;
+                    padding-left: 16px;
                     color: {self.neon_color};
                     font-weight: bold;
-                    font-size: 13px;
+                    font-size: 15px;
                 }}
             """)
         else:
@@ -311,16 +430,16 @@ class NavItem(QPushButton):
                 QPushButton {{
                     background: transparent;
                     border: none;
-                    border-left: 3px solid transparent;
+                    border-left: 4px solid transparent;
                     text-align: left;
-                    padding-left: 14px;
+                    padding-left: 16px;
                     color: {COLORS['text_secondary']};
                     font-weight: 600;
-                    font-size: 13px;
+                    font-size: 15px;
                 }}
                 QPushButton:hover {{
                     background: {COLORS['bg_hover']};
-                    border-left: 3px solid {COLORS['border']};
+                    border-left: 4px solid {COLORS['border_bright']};
                     color: {COLORS['text_primary']};
                 }}
             """)
@@ -330,23 +449,15 @@ class NavItem(QPushButton):
         self._apply_style()
 
 
-class CyberTerminal(QFrame):
-    """Terminal log - CYBERPUNK"""
+class CyberTerminal(QWidget):
+    """Terminal CYBERPUNK với corner cuts"""
     
     def __init__(self, parent=None):
         super().__init__(parent)
-        
-        self.setStyleSheet(f"""
-            QFrame {{
-                background: {COLORS['bg_darker']};
-                border: 2px solid {COLORS['border']};
-                border-top: 3px solid {COLORS['neon_green']};
-                border-radius: 4px;
-            }}
-        """)
+        self.corner_size = 10
         
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(10, 10, 10, 10)
+        layout.setContentsMargins(14, 14, 14, 14)
         
         self.text_area = QTextEdit()
         self.text_area.setReadOnly(True)
@@ -356,10 +467,41 @@ class CyberTerminal(QFrame):
                 border: none;
                 color: {COLORS['text_primary']};
                 font-family: 'Consolas', 'Courier New', monospace;
-                font-size: 11px;
+                font-size: 13px;
+                line-height: 1.5;
             }}
         """)
         layout.addWidget(self.text_area)
+    
+    def paintEvent(self, event):
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.Antialiasing)
+        
+        w, h = self.width(), self.height()
+        cs = self.corner_size
+        
+        # Path
+        path = QPainterPath()
+        path.moveTo(cs, 0)
+        path.lineTo(w - cs, 0)
+        path.lineTo(w, cs)
+        path.lineTo(w, h - cs)
+        path.lineTo(w - cs, h)
+        path.lineTo(cs, h)
+        path.lineTo(0, h - cs)
+        path.lineTo(0, cs)
+        path.closeSubpath()
+        
+        # Fill
+        painter.fillPath(path, QColor(COLORS['bg_darker']))
+        
+        # Border
+        painter.setPen(QPen(QColor(COLORS['border']), 2))
+        painter.drawPath(path)
+        
+        # Top accent
+        painter.setPen(QPen(QColor(COLORS['neon_green']), 3))
+        painter.drawLine(cs, 0, cs + 80, 0)
     
     def add_line(self, message: str, level: str = "info"):
         from datetime import datetime
@@ -376,7 +518,8 @@ class CyberTerminal(QFrame):
         color = colors.get(level, colors["info"])
         icon = icons.get(level, "▸")
         
-        html = f'<div style="margin: 2px 0;"><span style="color:{COLORS["text_muted"]};font-size:10px">{timestamp}</span> '
+        html = f'<div style="margin: 4px 0; font-size: 13px;">'
+        html += f'<span style="color:{COLORS["text_muted"]}">{timestamp}</span> '
         html += f'<span style="color:{color}; font-weight: bold;">{icon}</span> '
         html += f'<span style="color:{COLORS["text_primary"]}">{message}</span></div>'
         
@@ -389,7 +532,7 @@ class CyberTerminal(QFrame):
 
 
 class CyberTable(QTableWidget):
-    """Table - CYBERPUNK"""
+    """Table CYBERPUNK - BIGGER"""
     
     def __init__(self, columns: list, parent=None):
         super().__init__(parent)
@@ -402,16 +545,16 @@ class CyberTable(QTableWidget):
                 background: transparent;
                 border: none;
                 gridline-color: {COLORS['border']};
-                font-size: 12px;
+                font-size: 14px;
             }}
             QTableWidget::item {{
-                padding: 10px;
+                padding: 14px;
                 border-bottom: 1px solid {COLORS['border']};
                 color: {COLORS['text_primary']};
             }}
             QTableWidget::item:selected {{
-                background: rgba(0, 240, 255, 0.15);
-                border-left: 3px solid {COLORS['neon_cyan']};
+                background: rgba(0, 240, 255, 0.2);
+                border-left: 4px solid {COLORS['neon_cyan']};
             }}
             QTableWidget::item:hover {{
                 background: {COLORS['bg_hover']};
@@ -419,11 +562,11 @@ class CyberTable(QTableWidget):
             QHeaderView::section {{
                 background: {COLORS['bg_darker']};
                 color: {COLORS['neon_cyan']};
-                padding: 10px;
+                padding: 14px;
                 border: none;
-                border-bottom: 2px solid {COLORS['neon_cyan']};
+                border-bottom: 3px solid {COLORS['neon_cyan']};
                 font-weight: bold;
-                font-size: 10px;
+                font-size: 13px;
                 letter-spacing: 2px;
             }}
         """)
