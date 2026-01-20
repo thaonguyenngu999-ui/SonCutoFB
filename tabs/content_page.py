@@ -81,25 +81,38 @@ class ContentPage(QWidget):
         cat_header.setFixedHeight(44)
         cat_header.setStyleSheet(f"background: {COLORS['bg_darker']}; border-radius: 14px 14px 0 0;")
         cat_header_layout = QHBoxLayout(cat_header)
-        cat_header_layout.setContentsMargins(16, 0, 16, 0)
-        cat_header_layout.setSpacing(8)
+        cat_header_layout.setContentsMargins(12, 0, 12, 0)
+        cat_header_layout.setSpacing(6)
 
-        cat_title = QLabel("📁 DANH MUC")
-        cat_title.setStyleSheet(f"color: {COLORS['neon_yellow']}; font-size: 12px; font-weight: bold; letter-spacing: 2px;")
+        cat_title = QLabel("📁 DANH MỤC")
+        cat_title.setStyleSheet(f"color: {COLORS['neon_yellow']}; font-size: 11px; font-weight: bold;")
         cat_header_layout.addWidget(cat_title)
 
         self.cat_count_label = QLabel("[0]")
-        self.cat_count_label.setStyleSheet(f"color: {COLORS['text_muted']}; font-size: 11px;")
+        self.cat_count_label.setStyleSheet(f"color: {COLORS['text_muted']}; font-size: 10px;")
         cat_header_layout.addWidget(self.cat_count_label)
 
         cat_header_layout.addStretch()
 
+        left_layout.addWidget(cat_header)
+
+        # Add category input row (inline)
+        add_cat_widget = QWidget()
+        add_cat_widget.setStyleSheet(f"background: {COLORS['bg_darker']};")
+        add_cat_layout = QHBoxLayout(add_cat_widget)
+        add_cat_layout.setContentsMargins(8, 6, 8, 6)
+        add_cat_layout.setSpacing(6)
+
+        self.new_cat_input = CyberInput("Tên danh mục mới...")
+        self.new_cat_input.returnPressed.connect(self._add_category_quick)
+        add_cat_layout.addWidget(self.new_cat_input)
+
         btn_add_cat = CyberButton("+", "success")
         btn_add_cat.setFixedSize(32, 32)
-        btn_add_cat.clicked.connect(self._add_category)
-        cat_header_layout.addWidget(btn_add_cat)
+        btn_add_cat.clicked.connect(self._add_category_quick)
+        add_cat_layout.addWidget(btn_add_cat)
 
-        left_layout.addWidget(cat_header)
+        left_layout.addWidget(add_cat_widget)
 
         # Category list scroll
         scroll_cat = QScrollArea()
@@ -498,12 +511,26 @@ class ContentPage(QWidget):
     def _filter_contents(self, text):
         self._render_contents(text)
 
+    def _add_category_quick(self):
+        """Thêm category nhanh từ input"""
+        name = self.new_cat_input.text().strip()
+        if not name:
+            QMessageBox.warning(self, "Thông báo", "Vui lòng nhập tên danh mục!")
+            return
+
+        cat = save_category({'name': name})
+        self.new_cat_input.clear()
+        self.current_category_id = cat.get('id')
+        self.log(f"Đã thêm danh mục: {name}", "success")
+        self._load_data()
+        self._load_contents()
+
     def _add_category(self):
-        """Them category moi"""
-        name, ok = QInputDialog.getText(self, "Them danh muc", "Ten danh muc moi:")
+        """Thêm category mới (dialog - backup)"""
+        name, ok = QInputDialog.getText(self, "Thêm danh mục", "Tên danh mục mới:")
         if ok and name.strip():
             save_category({'name': name.strip()})
-            self.log(f"Da them danh muc: {name}", "success")
+            self.log(f"Đã thêm danh mục: {name}", "success")
             self._load_data()
 
     def _delete_category(self, cat_id):

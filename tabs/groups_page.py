@@ -1,14 +1,20 @@
 """
-Groups Page - Quan ly Groups Facebook
-PySide6 version - BEAUTIFUL UI like ProfilesPage
+Groups Page - Đăng nhóm Facebook
+PySide6 version với 3 TABS: Quét nhóm, Đăng nhóm, Đẩy tin
 """
 import threading
-from typing import List, Dict
+import random
+import time
+import os
+from typing import List, Dict, Optional
+from datetime import datetime, date, timedelta
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QFrame,
-    QMessageBox, QProgressBar, QTableWidgetItem, QSpinBox
+    QMessageBox, QProgressBar, QTableWidgetItem, QSpinBox,
+    QTabWidget, QScrollArea, QTextEdit, QFileDialog, QCheckBox
 )
-from PySide6.QtCore import Qt, QTimer
+from PySide6.QtCore import Qt, QTimer, Signal, QObject
+from PySide6.QtGui import QColor
 
 from config import COLORS
 from widgets import (
@@ -18,12 +24,25 @@ from widgets import (
 from api_service import api
 from db import (
     get_profiles, get_groups, get_groups_for_profiles, save_group,
-    delete_group, sync_groups, clear_groups
+    delete_group, sync_groups, clear_groups, get_categories, get_contents,
+    save_post_history, get_post_history, get_post_history_filtered, get_post_history_count
 )
 
 
+class GroupsSignal(QObject):
+    """Signal để thread-safe UI update"""
+    groups_loaded = Signal(list)
+    scan_progress = Signal(int, int)  # current, total
+    scan_complete = Signal()
+    post_progress = Signal(int, int)
+    post_complete = Signal()
+    comment_progress = Signal(int, int)
+    comment_complete = Signal()
+    log_message = Signal(str, str)  # message, type
+
+
 class GroupsPage(QWidget):
-    """Groups Page - Quan ly Groups - BEAUTIFUL UI"""
+    """Groups Page - Đăng nhóm với 3 TABS"""
 
     def __init__(self, log_func, parent=None):
         super().__init__(parent)
@@ -31,15 +50,36 @@ class GroupsPage(QWidget):
         self.profiles: List[Dict] = []
         self.groups: List[Dict] = []
         self.folders: List[Dict] = []
+        self.contents: List[Dict] = []
+        self.categories: List[Dict] = []
 
         # Selection
         self.selected_profile_uuids: List[str] = []
         self.profile_checkboxes: Dict[str, CyberCheckBox] = {}
-        self.group_checkboxes: Dict[int, CyberCheckBox] = {}
+        self.scan_group_checkboxes: Dict[int, CyberCheckBox] = {}
+        self.post_group_checkboxes: Dict[int, CyberCheckBox] = {}
+        self.boost_checkboxes: Dict[int, CyberCheckBox] = {}
 
         # State
         self._is_scanning = False
+        self._is_posting = False
+        self._is_commenting = False
         self._stop_requested = False
+
+        # Posted history
+        self.posted_history: List[Dict] = []
+        self.boost_posts: List[Dict] = []
+
+        # Signal
+        self.signal = GroupsSignal()
+        self.signal.groups_loaded.connect(self._on_groups_loaded)
+        self.signal.scan_progress.connect(self._on_scan_progress)
+        self.signal.scan_complete.connect(self._on_scan_complete)
+        self.signal.post_progress.connect(self._on_post_progress)
+        self.signal.post_complete.connect(self._on_post_complete)
+        self.signal.comment_progress.connect(self._on_comment_progress)
+        self.signal.comment_complete.connect(self._on_comment_complete)
+        self.signal.log_message.connect(lambda msg, t: self.log(msg, t))
 
         self._setup_ui()
         QTimer.singleShot(500, self._load_data)
@@ -53,89 +93,171 @@ class GroupsPage(QWidget):
         top_bar = QHBoxLayout()
         top_bar.setSpacing(12)
 
-        title = CyberTitle("Groups", "Quan ly Groups Facebook", "coral")
+        title = CyberTitle("Đăng Nhóm", "Quét, đăng bài và đẩy tin vào nhóm", "coral")
         top_bar.addWidget(title)
 
         top_bar.addStretch()
 
         self.stat_profiles = CyberStatCard("PROFILES", "0", "📁", "coral")
-        self.stat_profiles.setFixedWidth(160)
+        self.stat_profiles.setFixedWidth(140)
         top_bar.addWidget(self.stat_profiles)
 
-        self.stat_groups = CyberStatCard("GROUPS", "0", "👥", "purple")
-        self.stat_groups.setFixedWidth(160)
+        self.stat_groups = CyberStatCard("NHÓM", "0", "👥", "purple")
+        self.stat_groups.setFixedWidth(140)
         top_bar.addWidget(self.stat_groups)
 
-        self.stat_selected = CyberStatCard("DA CHON", "0", "✓", "mint")
-        self.stat_selected.setFixedWidth(160)
+        self.stat_selected = CyberStatCard("ĐÃ CHỌN", "0", "✓", "mint")
+        self.stat_selected.setFixedWidth(140)
         top_bar.addWidget(self.stat_selected)
 
         layout.addLayout(top_bar)
 
-        # ========== TOOLBAR ==========
-        toolbar = QHBoxLayout()
-        toolbar.setSpacing(8)
+        # ========== PROFILE SELECTOR ==========
+        profile_bar = QHBoxLayout()
+        profile_bar.setSpacing(8)
 
-        # Folder selection
-        self.folder_combo = CyberComboBox(["📁 Tat ca folder"])
+        folder_label = QLabel("📁 Thư mục:")
+        folder_label.setStyleSheet(f"color: {COLORS['text_primary']}; font-size: 12px;")
+        profile_bar.addWidget(folder_label)
+
+        self.folder_combo = CyberComboBox(["📁 Tất cả"])
         self.folder_combo.setFixedWidth(180)
         self.folder_combo.currentIndexChanged.connect(self._on_folder_change)
-        toolbar.addWidget(self.folder_combo)
+        profile_bar.addWidget(self.folder_combo)
 
-        btn_load = CyberButton("TAI", "cyan", "📥")
-        btn_load.clicked.connect(self._load_profiles_from_folder)
-        toolbar.addWidget(btn_load)
+        profile_label = QLabel("📱 Profile:")
+        profile_label.setStyleSheet(f"color: {COLORS['text_primary']}; font-size: 12px;")
+        profile_bar.addWidget(profile_label)
 
-        toolbar.addStretch()
+        self.profile_combo = CyberComboBox(["-- Chọn profile --"])
+        self.profile_combo.setFixedWidth(220)
+        self.profile_combo.currentIndexChanged.connect(self._on_profile_change)
+        profile_bar.addWidget(self.profile_combo)
 
-        # Search
-        self.search_input = CyberInput("🔍 Tim kiem Group...")
-        self.search_input.setFixedWidth(220)
-        self.search_input.textChanged.connect(self._filter_groups)
-        toolbar.addWidget(self.search_input)
+        btn_refresh = CyberButton("🔄 Làm mới", "ghost")
+        btn_refresh.clicked.connect(self._load_data)
+        profile_bar.addWidget(btn_refresh)
 
-        toolbar.addStretch()
+        profile_bar.addStretch()
 
-        # Threads
-        threads_label = QLabel("So luong:")
-        threads_label.setStyleSheet(f"color: {COLORS['text_secondary']}; font-size: 12px;")
-        toolbar.addWidget(threads_label)
+        self.profile_status = QLabel("")
+        self.profile_status.setStyleSheet(f"color: {COLORS['text_muted']}; font-size: 11px;")
+        profile_bar.addWidget(self.profile_status)
 
-        self.threads_spin = QSpinBox()
-        self.threads_spin.setRange(1, 10)
-        self.threads_spin.setValue(3)
-        self.threads_spin.setFixedWidth(60)
-        self.threads_spin.setStyleSheet(f"""
-            QSpinBox {{
+        layout.addLayout(profile_bar)
+
+        # ========== TAB WIDGET - 3 TABS ==========
+        self.tab_widget = QTabWidget()
+        self.tab_widget.setStyleSheet(f"""
+            QTabWidget::pane {{
                 background: {COLORS['bg_card']};
-                color: {COLORS['text_primary']};
                 border: 2px solid {COLORS['border']};
-                border-radius: 8px;
-                padding: 4px 8px;
+                border-radius: 12px;
+            }}
+            QTabBar::tab {{
+                background: {COLORS['bg_darker']};
+                color: {COLORS['text_muted']};
+                padding: 10px 24px;
+                margin-right: 4px;
+                border-radius: 8px 8px 0 0;
+                font-weight: bold;
                 font-size: 12px;
             }}
-            QSpinBox:focus {{
-                border-color: {COLORS['neon_cyan']};
+            QTabBar::tab:selected {{
+                background: {COLORS['bg_card']};
+                color: {COLORS['neon_cyan']};
+                border-bottom: 3px solid {COLORS['neon_cyan']};
+            }}
+            QTabBar::tab:hover:!selected {{
+                background: {COLORS['bg_hover']};
+                color: {COLORS['text_primary']};
             }}
         """)
-        toolbar.addWidget(self.threads_spin)
 
-        btn_refresh = CyberButton("⟳", "ghost")
-        btn_refresh.setFixedWidth(40)
-        btn_refresh.clicked.connect(self._load_data)
-        toolbar.addWidget(btn_refresh)
+        # Tab 1: Quét nhóm
+        self.tab_scan = QWidget()
+        self._create_scan_tab()
+        self.tab_widget.addTab(self.tab_scan, "🔍 Quét nhóm")
 
-        layout.addLayout(toolbar)
+        # Tab 2: Đăng nhóm
+        self.tab_post = QWidget()
+        self._create_post_tab()
+        self.tab_widget.addTab(self.tab_post, "📤 Đăng nhóm")
 
-        # ========== MAIN CONTENT ==========
-        content = QHBoxLayout()
-        content.setSpacing(12)
+        # Tab 3: Đẩy tin
+        self.tab_boost = QWidget()
+        self._create_boost_tab()
+        self.tab_widget.addTab(self.tab_boost, "💬 Đẩy tin")
 
-        # LEFT - Profiles Table
-        profiles_card = CyberCard(COLORS['neon_coral'])
-        profiles_card.setFixedWidth(340)
-        profiles_layout = QVBoxLayout(profiles_card)
-        profiles_layout.setContentsMargins(2, 2, 2, 2)
+        layout.addWidget(self.tab_widget, 1)
+
+    def _create_scan_tab(self):
+        """Tab Quét nhóm"""
+        layout = QVBoxLayout(self.tab_scan)
+        layout.setContentsMargins(12, 12, 12, 12)
+        layout.setSpacing(10)
+
+        # Action bar
+        action_bar = QHBoxLayout()
+        action_bar.setSpacing(8)
+
+        self.btn_scan = CyberButton("🔍 Quét nhóm", "success")
+        self.btn_scan.clicked.connect(self._scan_groups)
+        action_bar.addWidget(self.btn_scan)
+
+        self.btn_stop_scan = CyberButton("⏹️ Dừng", "danger")
+        self.btn_stop_scan.clicked.connect(self._stop_scan)
+        self.btn_stop_scan.setEnabled(False)
+        action_bar.addWidget(self.btn_stop_scan)
+
+        btn_clear = CyberButton("🗑️ Xóa tất cả", "ghost")
+        btn_clear.clicked.connect(self._clear_all_groups)
+        action_bar.addWidget(btn_clear)
+
+        action_bar.addStretch()
+
+        self.scan_stats = QLabel("Tổng: 0 nhóm")
+        self.scan_stats.setStyleSheet(f"color: {COLORS['text_muted']}; font-size: 12px;")
+        action_bar.addWidget(self.scan_stats)
+
+        layout.addLayout(action_bar)
+
+        # Progress
+        self.scan_progress = QProgressBar()
+        self.scan_progress.setFixedHeight(8)
+        self.scan_progress.setStyleSheet(f"""
+            QProgressBar {{
+                background: {COLORS['bg_darker']};
+                border-radius: 4px;
+            }}
+            QProgressBar::chunk {{
+                background: {COLORS['neon_cyan']};
+                border-radius: 4px;
+            }}
+        """)
+        layout.addWidget(self.scan_progress)
+
+        # Groups table
+        self.scan_table = CyberTable(["✓", "ID", "Tên nhóm", "Group ID", "Thành viên", "Ngày quét"])
+        self.scan_table.setColumnWidth(0, 50)
+        self.scan_table.setColumnWidth(1, 50)
+        self.scan_table.setColumnWidth(2, 280)
+        self.scan_table.setColumnWidth(3, 180)
+        self.scan_table.setColumnWidth(4, 100)
+        self.scan_table.setColumnWidth(5, 120)
+        layout.addWidget(self.scan_table, 1)
+
+    def _create_post_tab(self):
+        """Tab Đăng nhóm"""
+        layout = QHBoxLayout(self.tab_post)
+        layout.setContentsMargins(12, 12, 12, 12)
+        layout.setSpacing(12)
+
+        # ========== LEFT PANEL - Groups List ==========
+        left_card = CyberCard(COLORS['neon_purple'])
+        left_card.setFixedWidth(360)
+        left_layout = QVBoxLayout(left_card)
+        left_layout.setContentsMargins(2, 2, 2, 2)
 
         # Header
         header = QWidget()
@@ -143,288 +265,654 @@ class GroupsPage(QWidget):
         header.setStyleSheet(f"background: {COLORS['bg_darker']}; border-radius: 14px 14px 0 0;")
         header_layout = QHBoxLayout(header)
         header_layout.setContentsMargins(16, 0, 16, 0)
-        header_layout.setSpacing(12)
 
-        # Select All Profiles
-        select_widget = QWidget()
-        select_layout = QHBoxLayout(select_widget)
-        select_layout.setContentsMargins(0, 0, 0, 0)
-        select_layout.setSpacing(8)
-
-        self.select_all_profiles_cb = CyberCheckBox()
-        self.select_all_profiles_cb.stateChanged.connect(self._toggle_select_all_profiles)
-        select_layout.addWidget(self.select_all_profiles_cb)
-
-        select_label = QLabel("Chon tat ca")
-        select_label.setStyleSheet(f"color: {COLORS['text_secondary']}; font-size: 12px;")
-        select_label.setCursor(Qt.PointingHandCursor)
-        select_label.mousePressEvent = lambda e: self.select_all_profiles_cb.setChecked(
-            not self.select_all_profiles_cb.isChecked())
-        select_layout.addWidget(select_label)
-
-        header_layout.addWidget(select_widget)
-
-        sep = QFrame()
-        sep.setFixedWidth(2)
-        sep.setFixedHeight(24)
-        sep.setStyleSheet(f"background: {COLORS['border']};")
-        header_layout.addWidget(sep)
-
-        header_title = QLabel("📁 PROFILES")
-        header_title.setStyleSheet(
-            f"color: {COLORS['neon_coral']}; font-size: 12px; font-weight: bold; letter-spacing: 2px;")
+        header_title = QLabel("📋 Danh sách nhóm")
+        header_title.setStyleSheet(f"color: {COLORS['neon_purple']}; font-size: 13px; font-weight: bold;")
         header_layout.addWidget(header_title)
-
-        self.profiles_count_label = QLabel("[0]")
-        self.profiles_count_label.setStyleSheet(f"color: {COLORS['text_muted']}; font-size: 11px;")
-        header_layout.addWidget(self.profiles_count_label)
 
         header_layout.addStretch()
 
-        profiles_layout.addWidget(header)
+        self.post_select_all = CyberCheckBox()
+        self.post_select_all.stateChanged.connect(self._toggle_select_all_post)
+        header_layout.addWidget(self.post_select_all)
 
-        # Profiles Table
-        self.profiles_table = CyberTable(["✓", "NAME", "STATUS"])
-        self.profiles_table.setColumnWidth(0, 50)
-        self.profiles_table.setColumnWidth(1, 180)
-        self.profiles_table.setColumnWidth(2, 80)
+        select_label = QLabel("Tất cả")
+        select_label.setStyleSheet(f"color: {COLORS['text_muted']}; font-size: 11px;")
+        header_layout.addWidget(select_label)
 
-        profiles_layout.addWidget(self.profiles_table)
+        left_layout.addWidget(header)
 
-        # Profile stats
-        profile_stats_row = QHBoxLayout()
-        profile_stats_row.setContentsMargins(12, 8, 12, 8)
+        # Stats
+        self.post_stats = QLabel("Đã chọn: 0 / 0")
+        self.post_stats.setStyleSheet(f"color: {COLORS['neon_mint']}; font-size: 11px; padding: 8px 16px;")
+        left_layout.addWidget(self.post_stats)
 
-        self.profile_selected_label = QLabel("")
-        self.profile_selected_label.setStyleSheet(f"color: {COLORS['neon_cyan']}; font-size: 11px;")
-        profile_stats_row.addWidget(self.profile_selected_label)
+        # Filter
+        filter_widget = QWidget()
+        filter_widget.setStyleSheet(f"background: {COLORS['bg_darker']};")
+        filter_layout = QHBoxLayout(filter_widget)
+        filter_layout.setContentsMargins(12, 8, 12, 8)
 
-        profile_stats_row.addStretch()
+        self.group_filter = CyberInput("🔍 Lọc nhóm...")
+        self.group_filter.textChanged.connect(self._filter_post_groups)
+        filter_layout.addWidget(self.group_filter)
 
-        profiles_layout.addLayout(profile_stats_row)
-        content.addWidget(profiles_card)
+        left_layout.addWidget(filter_widget)
 
-        # RIGHT - Groups Table
-        groups_card = CyberCard(COLORS['neon_purple'])
-        groups_layout = QVBoxLayout(groups_card)
-        groups_layout.setContentsMargins(2, 2, 2, 2)
-
-        # Header
-        header2 = QWidget()
-        header2.setFixedHeight(44)
-        header2.setStyleSheet(f"background: {COLORS['bg_darker']}; border-radius: 14px 14px 0 0;")
-        header2_layout = QHBoxLayout(header2)
-        header2_layout.setContentsMargins(16, 0, 16, 0)
-        header2_layout.setSpacing(12)
-
-        # Select All Groups
-        select_widget2 = QWidget()
-        select_layout2 = QHBoxLayout(select_widget2)
-        select_layout2.setContentsMargins(0, 0, 0, 0)
-        select_layout2.setSpacing(8)
-
-        self.select_all_groups_cb = CyberCheckBox()
-        self.select_all_groups_cb.stateChanged.connect(self._toggle_select_all_groups)
-        select_layout2.addWidget(self.select_all_groups_cb)
-
-        select_label2 = QLabel("Chon tat ca")
-        select_label2.setStyleSheet(f"color: {COLORS['text_secondary']}; font-size: 12px;")
-        select_label2.setCursor(Qt.PointingHandCursor)
-        select_label2.mousePressEvent = lambda e: self.select_all_groups_cb.setChecked(
-            not self.select_all_groups_cb.isChecked())
-        select_layout2.addWidget(select_label2)
-
-        header2_layout.addWidget(select_widget2)
-
-        sep2 = QFrame()
-        sep2.setFixedWidth(2)
-        sep2.setFixedHeight(24)
-        sep2.setStyleSheet(f"background: {COLORS['border']};")
-        header2_layout.addWidget(sep2)
-
-        header2_title = QLabel("👥 GROUPS")
-        header2_title.setStyleSheet(
-            f"color: {COLORS['neon_purple']}; font-size: 12px; font-weight: bold; letter-spacing: 2px;")
-        header2_layout.addWidget(header2_title)
-
-        self.groups_count_label = QLabel("[0]")
-        self.groups_count_label.setStyleSheet(f"color: {COLORS['text_muted']}; font-size: 11px;")
-        header2_layout.addWidget(self.groups_count_label)
-
-        header2_layout.addStretch()
-
-        self.groups_selected_label = QLabel("")
-        self.groups_selected_label.setStyleSheet(f"color: {COLORS['neon_cyan']}; font-size: 11px;")
-        header2_layout.addWidget(self.groups_selected_label)
-
-        groups_layout.addWidget(header2)
-
-        # Groups Table
-        self.groups_table = CyberTable(["✓", "TEN GROUP", "THANH VIEN", "PROFILE"])
-        self.groups_table.setColumnWidth(0, 50)
-        self.groups_table.setColumnWidth(1, 280)
-        self.groups_table.setColumnWidth(2, 100)
-        self.groups_table.setColumnWidth(3, 150)
-
-        groups_layout.addWidget(self.groups_table)
-
-        # Progress bar
-        progress_row = QHBoxLayout()
-        progress_row.setContentsMargins(12, 4, 12, 4)
-
-        self.progress_bar = QProgressBar()
-        self.progress_bar.setFixedHeight(16)
-        self.progress_bar.setStyleSheet(f"""
-            QProgressBar {{
+        # Groups list scroll
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setStyleSheet(f"""
+            QScrollArea {{
                 background: {COLORS['bg_darker']};
-                border: 1px solid {COLORS['border']};
-                border-radius: 8px;
-            }}
-            QProgressBar::chunk {{
-                background: qlineargradient(x1:0, x2:1, stop:0 {COLORS['neon_coral']}, stop:1 {COLORS['neon_purple']});
-                border-radius: 7px;
+                border: none;
+                border-radius: 0 0 14px 14px;
             }}
         """)
-        self.progress_bar.setValue(0)
-        progress_row.addWidget(self.progress_bar)
 
-        groups_layout.addLayout(progress_row)
+        self.post_groups_widget = QWidget()
+        self.post_groups_widget.setStyleSheet(f"background: {COLORS['bg_darker']};")
+        self.post_groups_layout = QVBoxLayout(self.post_groups_widget)
+        self.post_groups_layout.setContentsMargins(8, 8, 8, 8)
+        self.post_groups_layout.setSpacing(4)
+        self.post_groups_layout.addStretch()
+
+        scroll.setWidget(self.post_groups_widget)
+        left_layout.addWidget(scroll, 1)
+
+        layout.addWidget(left_card)
+
+        # ========== RIGHT PANEL - Post Content ==========
+        right_card = CyberCard(COLORS['neon_cyan'])
+        right_layout = QVBoxLayout(right_card)
+        right_layout.setContentsMargins(2, 2, 2, 2)
+
+        # Header
+        right_header = QWidget()
+        right_header.setFixedHeight(44)
+        right_header.setStyleSheet(f"background: {COLORS['bg_darker']}; border-radius: 14px 14px 0 0;")
+        right_header_layout = QHBoxLayout(right_header)
+        right_header_layout.setContentsMargins(16, 0, 16, 0)
+
+        right_title = QLabel("📝 Nội dung đăng")
+        right_title.setStyleSheet(f"color: {COLORS['neon_cyan']}; font-size: 13px; font-weight: bold;")
+        right_header_layout.addWidget(right_title)
+
+        right_layout.addWidget(right_header)
+
+        # Content area (scrollable)
+        right_scroll = QScrollArea()
+        right_scroll.setWidgetResizable(True)
+        right_scroll.setStyleSheet(f"""
+            QScrollArea {{
+                background: {COLORS['bg_darker']};
+                border: none;
+            }}
+        """)
+
+        right_content = QWidget()
+        right_content.setStyleSheet(f"background: {COLORS['bg_darker']};")
+        content_layout = QVBoxLayout(right_content)
+        content_layout.setContentsMargins(16, 16, 16, 16)
+        content_layout.setSpacing(12)
+
+        # Category selector
+        cat_row = QHBoxLayout()
+        cat_label = QLabel("Danh mục:")
+        cat_label.setStyleSheet(f"color: {COLORS['text_secondary']}; font-size: 12px;")
+        cat_label.setFixedWidth(80)
+        cat_row.addWidget(cat_label)
+
+        self.cat_combo = CyberComboBox(["Mặc định"])
+        self.cat_combo.currentIndexChanged.connect(self._on_category_change)
+        cat_row.addWidget(self.cat_combo)
+
+        self.random_content_cb = CyberCheckBox()
+        self.random_content_cb.setChecked(True)
+        cat_row.addWidget(self.random_content_cb)
+
+        random_label = QLabel("Random nội dung")
+        random_label.setStyleSheet(f"color: {COLORS['text_muted']}; font-size: 11px;")
+        cat_row.addWidget(random_label)
+
+        content_layout.addLayout(cat_row)
+
+        # Content selector
+        content_row = QHBoxLayout()
+        content_label = QLabel("Tin đăng:")
+        content_label.setStyleSheet(f"color: {COLORS['text_secondary']}; font-size: 12px;")
+        content_label.setFixedWidth(80)
+        content_row.addWidget(content_label)
+
+        self.content_combo = CyberComboBox(["-- Random từ danh mục --"])
+        content_row.addWidget(self.content_combo)
+
+        content_layout.addLayout(content_row)
+
+        # Content preview
+        preview_label = QLabel("Xem trước nội dung:")
+        preview_label.setStyleSheet(f"color: {COLORS['text_secondary']}; font-size: 12px;")
+        content_layout.addWidget(preview_label)
+
+        self.content_preview = QTextEdit()
+        self.content_preview.setReadOnly(True)
+        self.content_preview.setFixedHeight(100)
+        self.content_preview.setStyleSheet(f"""
+            QTextEdit {{
+                background: {COLORS['bg_card']};
+                color: {COLORS['text_muted']};
+                border: 2px solid {COLORS['border']};
+                border-radius: 8px;
+                padding: 8px;
+                font-size: 11px;
+            }}
+        """)
+        content_layout.addWidget(self.content_preview)
+
+        # Image section
+        img_frame = QFrame()
+        img_frame.setStyleSheet(f"""
+            QFrame {{
+                background: {COLORS['bg_card']};
+                border: 2px solid {COLORS['border']};
+                border-radius: 10px;
+            }}
+        """)
+        img_layout = QVBoxLayout(img_frame)
+        img_layout.setContentsMargins(12, 12, 12, 12)
+        img_layout.setSpacing(8)
+
+        img_header = QHBoxLayout()
+        self.attach_img_cb = CyberCheckBox()
+        img_header.addWidget(self.attach_img_cb)
+
+        img_title = QLabel("Kèm hình ảnh")
+        img_title.setStyleSheet(f"color: {COLORS['text_primary']}; font-size: 12px;")
+        img_header.addWidget(img_title)
+        img_header.addStretch()
+
+        img_layout.addLayout(img_header)
+
+        img_path_row = QHBoxLayout()
+        self.img_folder_input = CyberInput("Đường dẫn thư mục ảnh...")
+        self.img_folder_input.setEnabled(False)
+        img_path_row.addWidget(self.img_folder_input)
+
+        btn_browse_img = CyberButton("📂", "purple")
+        btn_browse_img.setFixedWidth(40)
+        btn_browse_img.clicked.connect(self._browse_image_folder)
+        img_path_row.addWidget(btn_browse_img)
+
+        img_layout.addLayout(img_path_row)
+
+        self.img_count_label = QLabel("(Tổng: 0 ảnh)")
+        self.img_count_label.setStyleSheet(f"color: {COLORS['text_muted']}; font-size: 10px;")
+        img_layout.addWidget(self.img_count_label)
+
+        content_layout.addWidget(img_frame)
+
+        # Connect checkbox
+        self.attach_img_cb.stateChanged.connect(
+            lambda s: self.img_folder_input.setEnabled(s == Qt.Checked)
+        )
+
+        # Options
+        options_frame = QFrame()
+        options_frame.setStyleSheet(f"""
+            QFrame {{
+                background: {COLORS['bg_card']};
+                border: 2px solid {COLORS['border']};
+                border-radius: 10px;
+            }}
+        """)
+        options_layout = QVBoxLayout(options_frame)
+        options_layout.setContentsMargins(12, 12, 12, 12)
+        options_layout.setSpacing(8)
+
+        options_title = QLabel("⚙️ Tùy chọn đăng")
+        options_title.setStyleSheet(f"color: {COLORS['neon_yellow']}; font-size: 12px; font-weight: bold;")
+        options_layout.addWidget(options_title)
+
+        delay_row = QHBoxLayout()
+        delay_label = QLabel("Delay (giây):")
+        delay_label.setStyleSheet(f"color: {COLORS['text_secondary']}; font-size: 11px;")
+        delay_label.setFixedWidth(80)
+        delay_row.addWidget(delay_label)
+
+        self.delay_spin = QSpinBox()
+        self.delay_spin.setRange(1, 60)
+        self.delay_spin.setValue(5)
+        self.delay_spin.setFixedWidth(60)
+        self.delay_spin.setStyleSheet(f"""
+            QSpinBox {{
+                background: {COLORS['bg_darker']};
+                color: {COLORS['text_primary']};
+                border: 2px solid {COLORS['border']};
+                border-radius: 6px;
+                padding: 4px;
+            }}
+        """)
+        delay_row.addWidget(self.delay_spin)
+
+        self.random_delay_cb = CyberCheckBox()
+        self.random_delay_cb.setChecked(True)
+        delay_row.addWidget(self.random_delay_cb)
+
+        random_delay_label = QLabel("Random (1-10s)")
+        random_delay_label.setStyleSheet(f"color: {COLORS['text_muted']}; font-size: 10px;")
+        delay_row.addWidget(random_delay_label)
+
+        delay_row.addStretch()
+        options_layout.addLayout(delay_row)
+
+        content_layout.addWidget(options_frame)
 
         # Action buttons
-        actions_row = QHBoxLayout()
-        actions_row.setContentsMargins(12, 8, 12, 12)
-        actions_row.setSpacing(8)
+        btn_row = QHBoxLayout()
+        btn_row.setSpacing(8)
 
-        btn_scan = CyberButton("SCAN GROUPS", "success", "🔍")
-        btn_scan.clicked.connect(self._scan_groups)
-        actions_row.addWidget(btn_scan)
+        self.btn_post = CyberButton("📤 Đăng tường", "success")
+        self.btn_post.clicked.connect(self._start_posting)
+        btn_row.addWidget(self.btn_post)
 
-        btn_stop = CyberButton("DUNG", "warning", "⏹️")
-        btn_stop.clicked.connect(self._stop_scan)
-        actions_row.addWidget(btn_stop)
+        self.btn_stop_post = CyberButton("⏹️ Dừng", "danger")
+        self.btn_stop_post.clicked.connect(self._stop_posting)
+        self.btn_stop_post.setEnabled(False)
+        btn_row.addWidget(self.btn_stop_post)
 
-        actions_row.addStretch()
+        btn_row.addStretch()
+        content_layout.addLayout(btn_row)
 
-        btn_delete = CyberButton("XOA", "danger", "🗑️")
-        btn_delete.clicked.connect(self._delete_selected_groups)
-        actions_row.addWidget(btn_delete)
+        # Progress
+        self.post_progress = QProgressBar()
+        self.post_progress.setFixedHeight(8)
+        self.post_progress.setStyleSheet(f"""
+            QProgressBar {{
+                background: {COLORS['bg_card']};
+                border-radius: 4px;
+            }}
+            QProgressBar::chunk {{
+                background: {COLORS['neon_mint']};
+                border-radius: 4px;
+            }}
+        """)
+        content_layout.addWidget(self.post_progress)
 
-        btn_clear = CyberButton("XOA HET", "danger", "💥")
-        btn_clear.clicked.connect(self._clear_all_groups)
-        actions_row.addWidget(btn_clear)
+        self.post_status = QLabel("Tiến trình: 0 / 0")
+        self.post_status.setStyleSheet(f"color: {COLORS['text_muted']}; font-size: 11px;")
+        content_layout.addWidget(self.post_status)
 
-        groups_layout.addLayout(actions_row)
+        # Posted log
+        log_label = QLabel("📜 Nhật ký đăng tường:")
+        log_label.setStyleSheet(f"color: {COLORS['neon_yellow']}; font-size: 12px; font-weight: bold;")
+        content_layout.addWidget(log_label)
 
-        # Progress label
-        self.progress_label = QLabel("")
-        self.progress_label.setStyleSheet(f"color: {COLORS['neon_mint']}; font-size: 11px;")
-        self.progress_label.setAlignment(Qt.AlignCenter)
-        self.progress_label.setContentsMargins(12, 0, 12, 8)
-        groups_layout.addWidget(self.progress_label)
+        self.posted_log = QTextEdit()
+        self.posted_log.setReadOnly(True)
+        self.posted_log.setFixedHeight(120)
+        self.posted_log.setStyleSheet(f"""
+            QTextEdit {{
+                background: {COLORS['bg_card']};
+                color: {COLORS['text_muted']};
+                border: 2px solid {COLORS['border']};
+                border-radius: 8px;
+                padding: 8px;
+                font-size: 10px;
+            }}
+        """)
+        content_layout.addWidget(self.posted_log)
 
-        content.addWidget(groups_card, 1)
-        layout.addLayout(content, 1)
+        content_layout.addStretch()
+
+        right_scroll.setWidget(right_content)
+        right_layout.addWidget(right_scroll, 1)
+
+        layout.addWidget(right_card, 1)
+
+    def _create_boost_tab(self):
+        """Tab Đẩy tin (bình luận)"""
+        layout = QHBoxLayout(self.tab_boost)
+        layout.setContentsMargins(12, 12, 12, 12)
+        layout.setSpacing(12)
+
+        # ========== LEFT PANEL - Posted URLs ==========
+        left_card = CyberCard(COLORS['neon_coral'])
+        left_card.setFixedWidth(400)
+        left_layout = QVBoxLayout(left_card)
+        left_layout.setContentsMargins(2, 2, 2, 2)
+
+        # Header
+        header = QWidget()
+        header.setFixedHeight(44)
+        header.setStyleSheet(f"background: {COLORS['bg_darker']}; border-radius: 14px 14px 0 0;")
+        header_layout = QHBoxLayout(header)
+        header_layout.setContentsMargins(16, 0, 16, 0)
+
+        header_title = QLabel("📋 Bài đã đăng")
+        header_title.setStyleSheet(f"color: {COLORS['neon_coral']}; font-size: 13px; font-weight: bold;")
+        header_layout.addWidget(header_title)
+
+        header_layout.addStretch()
+
+        btn_refresh_boost = CyberButton("🔄", "ghost")
+        btn_refresh_boost.setFixedWidth(36)
+        btn_refresh_boost.clicked.connect(self._load_boost_posts)
+        header_layout.addWidget(btn_refresh_boost)
+
+        left_layout.addWidget(header)
+
+        # Filter row
+        filter_widget = QWidget()
+        filter_widget.setStyleSheet(f"background: {COLORS['bg_darker']};")
+        filter_layout = QHBoxLayout(filter_widget)
+        filter_layout.setContentsMargins(12, 8, 12, 8)
+
+        filter_label = QLabel("Lọc:")
+        filter_label.setStyleSheet(f"color: {COLORS['text_muted']}; font-size: 11px;")
+        filter_layout.addWidget(filter_label)
+
+        self.date_filter = CyberComboBox(["Hôm nay", "7 ngày", "30 ngày", "Tất cả"])
+        self.date_filter.setFixedWidth(100)
+        self.date_filter.currentIndexChanged.connect(self._on_date_filter_change)
+        filter_layout.addWidget(self.date_filter)
+
+        filter_layout.addStretch()
+
+        self.boost_count = QLabel("0 bài")
+        self.boost_count.setStyleSheet(f"color: {COLORS['neon_mint']}; font-size: 11px;")
+        filter_layout.addWidget(self.boost_count)
+
+        left_layout.addWidget(filter_widget)
+
+        # Select all
+        select_row = QWidget()
+        select_row.setStyleSheet(f"background: {COLORS['bg_darker']};")
+        select_layout = QHBoxLayout(select_row)
+        select_layout.setContentsMargins(12, 4, 12, 4)
+
+        self.boost_select_all = CyberCheckBox()
+        self.boost_select_all.stateChanged.connect(self._toggle_select_all_boost)
+        select_layout.addWidget(self.boost_select_all)
+
+        select_label = QLabel("Chọn tất cả")
+        select_label.setStyleSheet(f"color: {COLORS['text_muted']}; font-size: 11px;")
+        select_layout.addWidget(select_label)
+
+        select_layout.addStretch()
+
+        left_layout.addWidget(select_row)
+
+        # Posts list scroll
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setStyleSheet(f"""
+            QScrollArea {{
+                background: {COLORS['bg_darker']};
+                border: none;
+                border-radius: 0 0 14px 14px;
+            }}
+        """)
+
+        self.boost_list_widget = QWidget()
+        self.boost_list_widget.setStyleSheet(f"background: {COLORS['bg_darker']};")
+        self.boost_list_layout = QVBoxLayout(self.boost_list_widget)
+        self.boost_list_layout.setContentsMargins(8, 8, 8, 8)
+        self.boost_list_layout.setSpacing(4)
+        self.boost_list_layout.addStretch()
+
+        scroll.setWidget(self.boost_list_widget)
+        left_layout.addWidget(scroll, 1)
+
+        layout.addWidget(left_card)
+
+        # ========== RIGHT PANEL - Comment Content ==========
+        right_card = CyberCard(COLORS['neon_mint'])
+        right_layout = QVBoxLayout(right_card)
+        right_layout.setContentsMargins(2, 2, 2, 2)
+
+        # Header
+        right_header = QWidget()
+        right_header.setFixedHeight(44)
+        right_header.setStyleSheet(f"background: {COLORS['bg_darker']}; border-radius: 14px 14px 0 0;")
+        right_header_layout = QHBoxLayout(right_header)
+        right_header_layout.setContentsMargins(16, 0, 16, 0)
+
+        right_title = QLabel("💬 Nội dung bình luận")
+        right_title.setStyleSheet(f"color: {COLORS['neon_mint']}; font-size: 13px; font-weight: bold;")
+        right_header_layout.addWidget(right_title)
+
+        right_layout.addWidget(right_header)
+
+        # Content
+        right_content = QWidget()
+        right_content.setStyleSheet(f"background: {COLORS['bg_darker']}; border-radius: 0 0 14px 14px;")
+        content_layout = QVBoxLayout(right_content)
+        content_layout.setContentsMargins(16, 16, 16, 16)
+        content_layout.setSpacing(12)
+
+        comment_label = QLabel("Nội dung comment (mỗi dòng 1 comment, sẽ random):")
+        comment_label.setStyleSheet(f"color: {COLORS['text_secondary']}; font-size: 12px;")
+        content_layout.addWidget(comment_label)
+
+        self.comment_text = QTextEdit()
+        self.comment_text.setPlaceholderText("Hay quá!\nCảm ơn bạn!\nThông tin hữu ích!\nĐã lưu lại!")
+        self.comment_text.setText("Hay quá!\nCảm ơn bạn!\nThông tin hữu ích!\nĐã lưu lại!")
+        self.comment_text.setStyleSheet(f"""
+            QTextEdit {{
+                background: {COLORS['bg_card']};
+                color: {COLORS['text_primary']};
+                border: 2px solid {COLORS['border']};
+                border-radius: 10px;
+                padding: 12px;
+                font-size: 12px;
+            }}
+            QTextEdit:focus {{
+                border-color: {COLORS['neon_mint']};
+            }}
+        """)
+        content_layout.addWidget(self.comment_text, 1)
+
+        # Options
+        options_row = QHBoxLayout()
+
+        delay_label = QLabel("Delay (giây):")
+        delay_label.setStyleSheet(f"color: {COLORS['text_secondary']}; font-size: 11px;")
+        options_row.addWidget(delay_label)
+
+        self.comment_delay = QSpinBox()
+        self.comment_delay.setRange(1, 30)
+        self.comment_delay.setValue(3)
+        self.comment_delay.setFixedWidth(60)
+        self.comment_delay.setStyleSheet(f"""
+            QSpinBox {{
+                background: {COLORS['bg_card']};
+                color: {COLORS['text_primary']};
+                border: 2px solid {COLORS['border']};
+                border-radius: 6px;
+                padding: 4px;
+            }}
+        """)
+        options_row.addWidget(self.comment_delay)
+
+        self.random_comment_delay = CyberCheckBox()
+        self.random_comment_delay.setChecked(True)
+        options_row.addWidget(self.random_comment_delay)
+
+        random_label = QLabel("Random (1-5s)")
+        random_label.setStyleSheet(f"color: {COLORS['text_muted']}; font-size: 10px;")
+        options_row.addWidget(random_label)
+
+        options_row.addStretch()
+        content_layout.addLayout(options_row)
+
+        # Buttons
+        btn_row = QHBoxLayout()
+        btn_row.setSpacing(8)
+
+        self.btn_comment = CyberButton("💬 Bình luận", "success")
+        self.btn_comment.clicked.connect(self._start_commenting)
+        btn_row.addWidget(self.btn_comment)
+
+        self.btn_stop_comment = CyberButton("⏹️ Dừng", "danger")
+        self.btn_stop_comment.clicked.connect(self._stop_commenting)
+        self.btn_stop_comment.setEnabled(False)
+        btn_row.addWidget(self.btn_stop_comment)
+
+        btn_row.addStretch()
+        content_layout.addLayout(btn_row)
+
+        # Progress
+        self.comment_progress = QProgressBar()
+        self.comment_progress.setFixedHeight(8)
+        self.comment_progress.setStyleSheet(f"""
+            QProgressBar {{
+                background: {COLORS['bg_card']};
+                border-radius: 4px;
+            }}
+            QProgressBar::chunk {{
+                background: {COLORS['neon_cyan']};
+                border-radius: 4px;
+            }}
+        """)
+        content_layout.addWidget(self.comment_progress)
+
+        self.comment_status = QLabel("Tiến trình: 0 / 0")
+        self.comment_status.setStyleSheet(f"color: {COLORS['text_muted']}; font-size: 11px;")
+        content_layout.addWidget(self.comment_status)
+
+        # Comment log
+        log_label = QLabel("📜 Nhật ký bình luận:")
+        log_label.setStyleSheet(f"color: {COLORS['neon_yellow']}; font-size: 12px; font-weight: bold;")
+        content_layout.addWidget(log_label)
+
+        self.comment_log = QTextEdit()
+        self.comment_log.setReadOnly(True)
+        self.comment_log.setStyleSheet(f"""
+            QTextEdit {{
+                background: {COLORS['bg_card']};
+                color: {COLORS['text_muted']};
+                border: 2px solid {COLORS['border']};
+                border-radius: 8px;
+                padding: 8px;
+                font-size: 10px;
+            }}
+        """)
+        content_layout.addWidget(self.comment_log, 1)
+
+        right_layout.addWidget(right_content, 1)
+
+        layout.addWidget(right_card, 1)
+
+    # ============ DATA LOADING ============
 
     def _load_data(self):
-        """Load profiles va folders tu Hidemium"""
-        self.log("Loading data...", "info")
+        """Load profiles, folders, categories"""
+        self.log("Đang tải dữ liệu...", "info")
 
         def fetch():
             try:
                 folders = api.get_folders(limit=100)
                 profiles = api.get_profiles(limit=500)
-                return {"folders": folders or [], "profiles": profiles or []}
+                categories = get_categories()
+                return {"folders": folders, "profiles": profiles, "categories": categories}
             except Exception as e:
-                return {"folders": [], "profiles": get_profiles(), "error": str(e)}
+                return {"error": str(e)}
 
-        def on_complete(data):
-            if data.get("error"):
-                self.log(f"API Error: {data['error']}", "warning")
+        def on_done(result):
+            if "error" in result:
+                self.log(f"Lỗi: {result['error']}", "error")
+                return
 
-            self.folders = data.get("folders", [])
-            self.profiles = data.get("profiles", [])
+            self.folders = result.get("folders", [])
+            self.profiles = result.get("profiles", [])
+            self.categories = result.get("categories", [])
 
             # Update folder combo
             self.folder_combo.clear()
-            self.folder_combo.addItem("📁 Tat ca folder")
+            self.folder_combo.addItem("📁 Tất cả")
             for f in self.folders:
                 self.folder_combo.addItem(f"📁 {f.get('name', 'Unknown')}")
 
-            self._update_profiles_table()
-            self._update_stats()
-            self.log(f"Loaded {len(self.profiles)} profiles, {len(self.folders)} folders", "success")
+            # Update profile combo
+            self._update_profile_combo()
+
+            # Update category combo
+            self.cat_combo.clear()
+            for cat in self.categories:
+                self.cat_combo.addItem(f"📁 {cat.get('name', 'Mặc định')}")
+
+            # Update stats
+            self.stat_profiles.set_value(str(len(self.profiles)))
+
+            self.log(f"Đã tải {len(self.profiles)} profiles, {len(self.folders)} folders", "success")
 
         def run():
             result = fetch()
-            QTimer.singleShot(0, lambda: on_complete(result))
+            QTimer.singleShot(0, lambda: on_done(result))
 
         threading.Thread(target=run, daemon=True).start()
 
-    def _on_folder_change(self, index):
-        """Khi thay doi folder"""
-        if index > 0:
-            self._load_profiles_from_folder()
+    def _update_profile_combo(self):
+        """Update profile combo based on folder filter"""
+        self.profile_combo.clear()
+        self.profile_combo.addItem("-- Chọn profile --")
 
-    def _load_profiles_from_folder(self):
-        """Load profiles tu folder da chon"""
         folder_idx = self.folder_combo.currentIndex()
+        profiles_to_show = self.profiles
 
-        if folder_idx <= 0:
-            # Load all
-            self.log("Loading all profiles...", "info")
+        if folder_idx > 0 and folder_idx - 1 < len(self.folders):
+            folder_id = self.folders[folder_idx - 1].get('id')
+            profiles_to_show = [p for p in self.profiles if p.get('folder_id') == folder_id]
 
-            def fetch():
-                try:
-                    return api.get_profiles(limit=500) or []
-                except:
-                    return get_profiles()
+        for p in profiles_to_show:
+            name = p.get('name', 'Unknown')
+            self.profile_combo.addItem(f"📱 {name[:30]}")
 
-            def on_complete(profiles):
-                self.profiles = profiles
-                self._update_profiles_table()
-                self._update_stats()
-                self.log(f"Loaded {len(self.profiles)} profiles", "success")
+        self.profile_status.setText(f"{len(profiles_to_show)} profiles")
 
-            def run():
-                result = fetch()
-                QTimer.singleShot(0, lambda: on_complete(result))
+    def _on_folder_change(self, idx):
+        self._update_profile_combo()
 
-            threading.Thread(target=run, daemon=True).start()
+    def _on_profile_change(self, idx):
+        """When profile selected, load groups"""
+        if idx <= 0:
             return
 
-        folder = self.folders[folder_idx - 1]
-        folder_id = folder.get('id')
-        folder_name = folder.get('name', 'Unknown')
+        folder_idx = self.folder_combo.currentIndex()
+        profiles_to_show = self.profiles
 
-        self.log(f"Loading profiles from {folder_name}...", "info")
+        if folder_idx > 0 and folder_idx - 1 < len(self.folders):
+            folder_id = self.folders[folder_idx - 1].get('id')
+            profiles_to_show = [p for p in self.profiles if p.get('folder_id') == folder_id]
 
-        def fetch():
-            try:
-                return api.get_profiles(folder_id=[folder_id], limit=500) or []
-            except:
-                return []
+        if idx - 1 < len(profiles_to_show):
+            profile = profiles_to_show[idx - 1]
+            uuid = profile.get('uuid')
+            self.selected_profile_uuids = [uuid]
+            self._load_groups_for_profile(uuid)
 
-        def on_complete(profiles):
-            self.profiles = profiles
-            self._update_profiles_table()
-            self._update_stats()
-            self.log(f"Loaded {len(self.profiles)} profiles from {folder_name}", "success")
+    def _load_groups_for_profile(self, uuid: str):
+        """Load groups for selected profile from DB"""
+        self.groups = get_groups_for_profiles([uuid])
+        self._render_scan_groups()
+        self._render_post_groups()
+        self.stat_groups.set_value(str(len(self.groups)))
+        self.scan_stats.setText(f"Tổng: {len(self.groups)} nhóm")
 
-        def run():
-            result = fetch()
-            QTimer.singleShot(0, lambda: on_complete(result))
+    def _on_groups_loaded(self, groups):
+        self.groups = groups
+        self._render_scan_groups()
+        self._render_post_groups()
 
-        threading.Thread(target=run, daemon=True).start()
+    # ============ SCAN TAB ============
 
-    def _update_profiles_table(self):
-        """Update profiles table"""
-        self.profiles_table.setRowCount(len(self.profiles))
-        self.profile_checkboxes.clear()
+    def _render_scan_groups(self):
+        """Render groups in scan table"""
+        self.scan_table.setRowCount(len(self.groups))
+        self.scan_group_checkboxes.clear()
 
-        for row, profile in enumerate(self.profiles):
-            uuid = profile.get('uuid', '')
-            name = profile.get('name', 'Unknown')
-            status = profile.get('status', 'stopped')
+        for row, group in enumerate(self.groups):
+            group_id = group.get('id', row)
 
             # Checkbox
             cb_widget = QWidget()
@@ -433,227 +921,392 @@ class GroupsPage(QWidget):
             cb_layout.setContentsMargins(0, 0, 0, 0)
             cb_layout.setAlignment(Qt.AlignCenter)
             checkbox = CyberCheckBox()
-            checkbox.setChecked(uuid in self.selected_profile_uuids)
-            checkbox.stateChanged.connect(lambda state, u=uuid: self._on_profile_select(u, state))
             cb_layout.addWidget(checkbox)
-            self.profiles_table.setCellWidget(row, 0, cb_widget)
-            self.profile_checkboxes[uuid] = checkbox
+            self.scan_table.setCellWidget(row, 0, cb_widget)
+            self.scan_group_checkboxes[group_id] = checkbox
+
+            # ID
+            self.scan_table.setItem(row, 1, QTableWidgetItem(str(row + 1)))
 
             # Name
-            name_display = name[:25] + "..." if len(name) > 25 else name
-            self.profiles_table.setItem(row, 1, QTableWidgetItem(name_display))
+            name = group.get('name', 'Unknown')[:40]
+            self.scan_table.setItem(row, 2, QTableWidgetItem(name))
 
-            # Status
-            status_text = "🟢 ON" if status == "running" else "⚫ OFF"
-            self.profiles_table.setItem(row, 2, QTableWidgetItem(status_text))
+            # Group ID
+            fb_id = group.get('group_id', '')
+            self.scan_table.setItem(row, 3, QTableWidgetItem(str(fb_id)))
 
-        self.profiles_count_label.setText(f"[{len(self.profiles)} profiles]")
+            # Members
+            members = group.get('members', 0)
+            self.scan_table.setItem(row, 4, QTableWidgetItem(str(members)))
 
-    def _on_profile_select(self, uuid: str, state):
-        """Khi chon/bo chon profile"""
-        if state == Qt.Checked:
-            if uuid not in self.selected_profile_uuids:
-                self.selected_profile_uuids.append(uuid)
-        else:
-            if uuid in self.selected_profile_uuids:
-                self.selected_profile_uuids.remove(uuid)
-
-        self._update_profile_selection_label()
-        self._load_groups_for_selected()
-
-    def _toggle_select_all_profiles(self, state):
-        """Toggle chon tat ca profiles"""
-        checked = state == Qt.Checked
-        for uuid, cb in self.profile_checkboxes.items():
-            cb.blockSignals(True)
-            cb.setChecked(checked)
-            cb.blockSignals(False)
-
-            if checked:
-                if uuid not in self.selected_profile_uuids:
-                    self.selected_profile_uuids.append(uuid)
-            else:
-                if uuid in self.selected_profile_uuids:
-                    self.selected_profile_uuids.remove(uuid)
-
-        self._update_profile_selection_label()
-        self._load_groups_for_selected()
-
-    def _update_profile_selection_label(self):
-        """Update label so profile da chon"""
-        count = len(self.selected_profile_uuids)
-        self.profile_selected_label.setText(f"✓ {count} da chon" if count > 0 else "")
-        self.stat_selected.set_value(str(count))
-
-    def _load_groups_for_selected(self):
-        """Load groups cho cac profiles da chon"""
-        if not self.selected_profile_uuids:
-            self.groups = []
-            self._update_groups_table()
-            return
-
-        self.groups = get_groups_for_profiles(self.selected_profile_uuids)
-        self._update_groups_table()
-
-    def _update_groups_table(self, search_text=None):
-        """Update groups table"""
-        # Filter by search
-        groups_to_show = self.groups
-        if search_text:
-            search_lower = search_text.lower()
-            groups_to_show = [g for g in self.groups if search_lower in g.get('group_name', '').lower()]
-
-        self.groups_table.setRowCount(len(groups_to_show))
-        self.group_checkboxes.clear()
-
-        # Profile name map
-        profile_map = {p.get('uuid'): p.get('name', 'Unknown') for p in self.profiles}
-
-        for row, group in enumerate(groups_to_show):
-            group_id = group.get('id')
-            group_name = group.get('group_name', 'Unknown')
-            member_count = group.get('member_count', 0)
-            profile_uuid = group.get('profile_uuid', '')
-            profile_name = profile_map.get(profile_uuid, 'Unknown')
-
-            # Checkbox
-            cb_widget = QWidget()
-            cb_widget.setStyleSheet("background: transparent;")
-            cb_layout = QHBoxLayout(cb_widget)
-            cb_layout.setContentsMargins(0, 0, 0, 0)
-            cb_layout.setAlignment(Qt.AlignCenter)
-            checkbox = CyberCheckBox()
-            checkbox.stateChanged.connect(self._update_groups_selection_count)
-            cb_layout.addWidget(checkbox)
-            self.groups_table.setCellWidget(row, 0, cb_widget)
-            self.group_checkboxes[group_id] = checkbox
-
-            # Group name
-            name_display = group_name[:35] + "..." if len(group_name) > 35 else group_name
-            self.groups_table.setItem(row, 1, QTableWidgetItem(name_display))
-
-            # Member count
-            member_item = QTableWidgetItem(f"{member_count:,}")
-            member_item.setForeground(Qt.cyan)
-            self.groups_table.setItem(row, 2, member_item)
-
-            # Profile name
-            profile_display = profile_name[:18] + "..." if len(profile_name) > 18 else profile_name
-            self.groups_table.setItem(row, 3, QTableWidgetItem(profile_display))
-
-        self.groups_count_label.setText(f"[{len(groups_to_show)} groups]")
-        self.stat_groups.set_value(str(len(groups_to_show)))
-
-    def _toggle_select_all_groups(self, state):
-        """Toggle chon tat ca groups"""
-        checked = state == Qt.Checked
-        for gid, cb in self.group_checkboxes.items():
-            cb.blockSignals(True)
-            cb.setChecked(checked)
-            cb.blockSignals(False)
-
-        self._update_groups_selection_count()
-
-    def _update_groups_selection_count(self):
-        """Update so groups da chon"""
-        count = sum(1 for cb in self.group_checkboxes.values() if cb.isChecked())
-        self.groups_selected_label.setText(f"✓ {count} da chon" if count > 0 else "")
-
-    def _filter_groups(self, text):
-        """Filter groups theo search text"""
-        self._update_groups_table(text)
-
-    def _update_stats(self):
-        """Update all stats"""
-        self.stat_profiles.set_value(str(len(self.profiles)))
-        self.stat_groups.set_value(str(len(self.groups)))
-        self.stat_selected.set_value(str(len(self.selected_profile_uuids)))
+            # Date
+            scan_date = group.get('scan_date', '')[:10] if group.get('scan_date') else ''
+            self.scan_table.setItem(row, 5, QTableWidgetItem(scan_date))
 
     def _scan_groups(self):
-        """Scan groups tu profiles da chon"""
+        """Start scanning groups"""
         if not self.selected_profile_uuids:
-            QMessageBox.warning(self, "Loi", "Chua chon profile nao!")
-            return
-
-        if self._is_scanning:
-            QMessageBox.warning(self, "Loi", "Dang scan, vui long doi!")
+            QMessageBox.warning(self, "Thông báo", "Vui lòng chọn profile trước!")
             return
 
         self._is_scanning = True
         self._stop_requested = False
-        total = len(self.selected_profile_uuids)
-        self.progress_bar.setMaximum(total)
-        self.progress_bar.setValue(0)
-        self.log(f"Bat dau scan groups cho {total} profiles...", "info")
+        self.btn_scan.setEnabled(False)
+        self.btn_stop_scan.setEnabled(True)
+        self.log("Bắt đầu quét nhóm...", "info")
 
-        def do_scan():
-            import time
+        def scan():
+            try:
+                # TODO: Implement actual group scanning via CDP
+                # For now, just simulate
+                for i in range(5):
+                    if self._stop_requested:
+                        break
+                    time.sleep(1)
+                    self.signal.scan_progress.emit(i + 1, 5)
 
-            for i, uuid in enumerate(self.selected_profile_uuids):
-                if self._stop_requested:
-                    QTimer.singleShot(0, lambda: self.log("Scan da dung!", "warning"))
-                    break
+                self.signal.scan_complete.emit()
+            except Exception as e:
+                self.signal.log_message.emit(f"Lỗi quét: {str(e)}", "error")
+                self.signal.scan_complete.emit()
 
-                QTimer.singleShot(0, lambda v=i + 1: self.progress_bar.setValue(v))
-
-                name = next((p.get('name', '') for p in self.profiles if p.get('uuid') == uuid), uuid[:8])
-                QTimer.singleShot(0, lambda m=f"[{i + 1}/{total}] Scanning {name}...": self.progress_label.setText(m))
-                QTimer.singleShot(0, lambda m=f"Scanning {name}...": self.log(m, "info"))
-
-                # TODO: Implement real group scanning via Hidemium script
-                # For now, just simulate with delay
-                time.sleep(1)
-
-            self._is_scanning = False
-            QTimer.singleShot(0, lambda: self.progress_label.setText("Scan hoan thanh!"))
-            QTimer.singleShot(0, lambda: self.log("Scan groups hoan thanh!", "success"))
-            QTimer.singleShot(0, self._load_groups_for_selected)
-
-        threading.Thread(target=do_scan, daemon=True).start()
+        threading.Thread(target=scan, daemon=True).start()
 
     def _stop_scan(self):
-        """Dung scan"""
-        if self._is_scanning:
-            self._stop_requested = True
-            self.log("Dang dung scan...", "info")
-            self.progress_label.setText("Dang dung...")
+        self._stop_requested = True
+        self.log("Đang dừng quét...", "warning")
 
-    def _delete_selected_groups(self):
-        """Xoa cac groups da chon"""
-        selected_ids = [gid for gid, cb in self.group_checkboxes.items() if cb.isChecked()]
+    def _on_scan_progress(self, current, total):
+        self.scan_progress.setValue(int(current / total * 100))
 
-        if not selected_ids:
-            QMessageBox.warning(self, "Loi", "Chua chon group nao!")
-            return
-
-        reply = QMessageBox.question(
-            self, "Xac nhan",
-            f"Ban co chac muon xoa {len(selected_ids)} groups?",
-            QMessageBox.Yes | QMessageBox.No
-        )
-
-        if reply == QMessageBox.Yes:
-            for gid in selected_ids:
-                delete_group(gid)
-            self.log(f"Da xoa {len(selected_ids)} groups", "success")
-            self._load_groups_for_selected()
+    def _on_scan_complete(self):
+        self._is_scanning = False
+        self.btn_scan.setEnabled(True)
+        self.btn_stop_scan.setEnabled(False)
+        self.scan_progress.setValue(100)
+        self.log("Quét nhóm hoàn tất!", "success")
 
     def _clear_all_groups(self):
-        """Xoa tat ca groups cua cac profiles da chon"""
-        if not self.selected_profile_uuids:
-            QMessageBox.warning(self, "Loi", "Chua chon profile nao!")
-            return
-
+        """Clear all groups"""
         reply = QMessageBox.question(
-            self, "Xac nhan",
-            f"Ban co chac muon xoa TAT CA groups cua {len(self.selected_profile_uuids)} profiles?",
+            self, "Xác nhận",
+            "Xóa tất cả nhóm đã quét?",
             QMessageBox.Yes | QMessageBox.No
         )
 
         if reply == QMessageBox.Yes:
+            clear_groups()
+            self.groups = []
+            self._render_scan_groups()
+            self._render_post_groups()
+            self.stat_groups.set_value("0")
+            self.log("Đã xóa tất cả nhóm", "success")
+
+    # ============ POST TAB ============
+
+    def _render_post_groups(self):
+        """Render groups list in post tab"""
+        # Clear old items
+        while self.post_groups_layout.count() > 0:
+            item = self.post_groups_layout.takeAt(0)
+            if item.widget():
+                item.widget().deleteLater()
+
+        self.post_group_checkboxes.clear()
+
+        if not self.groups:
+            empty_label = QLabel("Chưa có nhóm\nQuét nhóm trước")
+            empty_label.setAlignment(Qt.AlignCenter)
+            empty_label.setStyleSheet(f"color: {COLORS['text_muted']}; font-size: 12px; padding: 40px;")
+            self.post_groups_layout.addWidget(empty_label)
+            self.post_groups_layout.addStretch()
+            return
+
+        for group in self.groups:
+            group_id = group.get('id')
+            name = group.get('name', 'Unknown')
+
+            row = QWidget()
+            row.setFixedHeight(36)
+            row.setStyleSheet(f"""
+                QWidget {{
+                    background: {COLORS['bg_card']};
+                    border-radius: 6px;
+                }}
+                QWidget:hover {{
+                    background: {COLORS['bg_hover']};
+                }}
+            """)
+
+            row_layout = QHBoxLayout(row)
+            row_layout.setContentsMargins(8, 4, 8, 4)
+            row_layout.setSpacing(8)
+
+            checkbox = CyberCheckBox()
+            checkbox.stateChanged.connect(self._update_post_stats)
+            row_layout.addWidget(checkbox)
+            self.post_group_checkboxes[group_id] = checkbox
+
+            name_label = QLabel(name[:35] + "..." if len(name) > 35 else name)
+            name_label.setStyleSheet(f"color: {COLORS['text_primary']}; font-size: 11px;")
+            row_layout.addWidget(name_label, 1)
+
+            self.post_groups_layout.addWidget(row)
+
+        self.post_groups_layout.addStretch()
+        self._update_post_stats()
+
+    def _filter_post_groups(self, text):
+        """Filter post groups by text"""
+        text = text.lower()
+        for group in self.groups:
+            group_id = group.get('id')
+            name = group.get('name', '').lower()
+            if group_id in self.post_group_checkboxes:
+                cb = self.post_group_checkboxes[group_id]
+                parent = cb.parent()
+                if parent:
+                    parent.setVisible(text in name or not text)
+
+    def _toggle_select_all_post(self, state):
+        checked = state == Qt.Checked
+        for cb in self.post_group_checkboxes.values():
+            cb.setChecked(checked)
+        self._update_post_stats()
+
+    def _update_post_stats(self):
+        selected = sum(1 for cb in self.post_group_checkboxes.values() if cb.isChecked())
+        total = len(self.post_group_checkboxes)
+        self.post_stats.setText(f"Đã chọn: {selected} / {total}")
+        self.stat_selected.set_value(str(selected))
+
+    def _on_category_change(self, idx):
+        """Load contents for selected category"""
+        if idx < 0 or idx >= len(self.categories):
+            return
+
+        cat_id = self.categories[idx].get('id')
+        self.contents = get_contents(cat_id)
+
+        self.content_combo.clear()
+        self.content_combo.addItem("-- Random từ danh mục --")
+        for content in self.contents:
+            title = content.get('title', 'Không tiêu đề')[:30]
+            self.content_combo.addItem(f"📝 {title}")
+
+    def _browse_image_folder(self):
+        """Browse for image folder"""
+        folder = QFileDialog.getExistingDirectory(self, "Chọn thư mục ảnh")
+        if folder:
+            self.img_folder_input.setText(folder)
+            # Count images
             count = 0
-            for uuid in self.selected_profile_uuids:
-                if clear_groups(uuid):
+            for f in os.listdir(folder):
+                if f.lower().endswith(('.png', '.jpg', '.jpeg', '.gif', '.webp')):
                     count += 1
-            self.log(f"Da xoa groups cua {count} profiles", "success")
-            self._load_groups_for_selected()
+            self.img_count_label.setText(f"(Tổng: {count} ảnh)")
+
+    def _start_posting(self):
+        """Start posting to groups"""
+        selected_groups = [g for g in self.groups if g.get('id') in self.post_group_checkboxes
+                          and self.post_group_checkboxes[g.get('id')].isChecked()]
+
+        if not selected_groups:
+            QMessageBox.warning(self, "Thông báo", "Vui lòng chọn ít nhất 1 nhóm!")
+            return
+
+        self._is_posting = True
+        self._stop_requested = False
+        self.btn_post.setEnabled(False)
+        self.btn_stop_post.setEnabled(True)
+        self.log(f"Bắt đầu đăng vào {len(selected_groups)} nhóm...", "info")
+
+        def post():
+            try:
+                total = len(selected_groups)
+                for i, group in enumerate(selected_groups):
+                    if self._stop_requested:
+                        break
+
+                    group_name = group.get('name', 'Unknown')
+                    self.signal.log_message.emit(f"Đăng vào: {group_name}", "info")
+
+                    # TODO: Implement actual posting via CDP
+                    delay = random.randint(1, 10) if self.random_delay_cb.isChecked() else self.delay_spin.value()
+                    time.sleep(delay)
+
+                    self.signal.post_progress.emit(i + 1, total)
+
+                self.signal.post_complete.emit()
+            except Exception as e:
+                self.signal.log_message.emit(f"Lỗi: {str(e)}", "error")
+                self.signal.post_complete.emit()
+
+        threading.Thread(target=post, daemon=True).start()
+
+    def _stop_posting(self):
+        self._stop_requested = True
+        self.log("Đang dừng đăng...", "warning")
+
+    def _on_post_progress(self, current, total):
+        self.post_progress.setValue(int(current / total * 100))
+        self.post_status.setText(f"Tiến trình: {current} / {total}")
+
+    def _on_post_complete(self):
+        self._is_posting = False
+        self.btn_post.setEnabled(True)
+        self.btn_stop_post.setEnabled(False)
+        self.post_progress.setValue(100)
+        self.log("Đăng tường hoàn tất!", "success")
+
+    # ============ BOOST TAB ============
+
+    def _load_boost_posts(self):
+        """Load posted history for boost"""
+        filter_idx = self.date_filter.currentIndex()
+
+        if filter_idx == 0:  # Today
+            days = 1
+        elif filter_idx == 1:  # 7 days
+            days = 7
+        elif filter_idx == 2:  # 30 days
+            days = 30
+        else:  # All
+            days = 9999
+
+        self.boost_posts = get_post_history_filtered(days_back=days)
+        self._render_boost_posts()
+
+    def _on_date_filter_change(self, idx):
+        self._load_boost_posts()
+
+    def _render_boost_posts(self):
+        """Render boost posts list"""
+        # Clear old items
+        while self.boost_list_layout.count() > 0:
+            item = self.boost_list_layout.takeAt(0)
+            if item.widget():
+                item.widget().deleteLater()
+
+        self.boost_checkboxes.clear()
+
+        if not self.boost_posts:
+            empty_label = QLabel("Chưa có bài đăng nào\nĐăng bài ở tab Đăng nhóm trước")
+            empty_label.setAlignment(Qt.AlignCenter)
+            empty_label.setStyleSheet(f"color: {COLORS['text_muted']}; font-size: 12px; padding: 40px;")
+            self.boost_list_layout.addWidget(empty_label)
+            self.boost_list_layout.addStretch()
+            self.boost_count.setText("0 bài")
+            return
+
+        for post in self.boost_posts:
+            post_id = post.get('id')
+            group_name = post.get('group_name', 'Unknown')[:25]
+            post_url = post.get('post_url', '')[:30]
+
+            row = QWidget()
+            row.setFixedHeight(44)
+            row.setStyleSheet(f"""
+                QWidget {{
+                    background: {COLORS['bg_card']};
+                    border-radius: 6px;
+                }}
+                QWidget:hover {{
+                    background: {COLORS['bg_hover']};
+                }}
+            """)
+
+            row_layout = QHBoxLayout(row)
+            row_layout.setContentsMargins(8, 4, 8, 4)
+            row_layout.setSpacing(8)
+
+            checkbox = CyberCheckBox()
+            row_layout.addWidget(checkbox)
+            self.boost_checkboxes[post_id] = checkbox
+
+            info_widget = QWidget()
+            info_layout = QVBoxLayout(info_widget)
+            info_layout.setContentsMargins(0, 0, 0, 0)
+            info_layout.setSpacing(2)
+
+            name_label = QLabel(group_name)
+            name_label.setStyleSheet(f"color: {COLORS['text_primary']}; font-size: 11px;")
+            info_layout.addWidget(name_label)
+
+            url_label = QLabel(post_url + "..." if post_url else "—")
+            url_label.setStyleSheet(f"color: {COLORS['text_muted']}; font-size: 9px;")
+            info_layout.addWidget(url_label)
+
+            row_layout.addWidget(info_widget, 1)
+
+            self.boost_list_layout.addWidget(row)
+
+        self.boost_list_layout.addStretch()
+        self.boost_count.setText(f"{len(self.boost_posts)} bài")
+
+    def _toggle_select_all_boost(self, state):
+        checked = state == Qt.Checked
+        for cb in self.boost_checkboxes.values():
+            cb.setChecked(checked)
+
+    def _start_commenting(self):
+        """Start commenting on posts"""
+        selected_posts = [p for p in self.boost_posts if p.get('id') in self.boost_checkboxes
+                         and self.boost_checkboxes[p.get('id')].isChecked()]
+
+        if not selected_posts:
+            QMessageBox.warning(self, "Thông báo", "Vui lòng chọn ít nhất 1 bài!")
+            return
+
+        comments = self.comment_text.toPlainText().strip().split('\n')
+        comments = [c.strip() for c in comments if c.strip()]
+
+        if not comments:
+            QMessageBox.warning(self, "Thông báo", "Vui lòng nhập nội dung bình luận!")
+            return
+
+        self._is_commenting = True
+        self._stop_requested = False
+        self.btn_comment.setEnabled(False)
+        self.btn_stop_comment.setEnabled(True)
+        self.log(f"Bắt đầu bình luận {len(selected_posts)} bài...", "info")
+
+        def comment():
+            try:
+                total = len(selected_posts)
+                for i, post in enumerate(selected_posts):
+                    if self._stop_requested:
+                        break
+
+                    group_name = post.get('group_name', 'Unknown')
+                    comment_text = random.choice(comments)
+                    self.signal.log_message.emit(f"Comment: {group_name} - {comment_text[:30]}", "info")
+
+                    # TODO: Implement actual commenting via CDP
+                    delay = random.randint(1, 5) if self.random_comment_delay.isChecked() else self.comment_delay.value()
+                    time.sleep(delay)
+
+                    self.signal.comment_progress.emit(i + 1, total)
+
+                self.signal.comment_complete.emit()
+            except Exception as e:
+                self.signal.log_message.emit(f"Lỗi: {str(e)}", "error")
+                self.signal.comment_complete.emit()
+
+        threading.Thread(target=comment, daemon=True).start()
+
+    def _stop_commenting(self):
+        self._stop_requested = True
+        self.log("Đang dừng bình luận...", "warning")
+
+    def _on_comment_progress(self, current, total):
+        self.comment_progress.setValue(int(current / total * 100))
+        self.comment_status.setText(f"Tiến trình: {current} / {total}")
+
+    def _on_comment_complete(self):
+        self._is_commenting = False
+        self.btn_comment.setEnabled(True)
+        self.btn_stop_comment.setEnabled(False)
+        self.comment_progress.setValue(100)
+        self.log("Bình luận hoàn tất!", "success")
