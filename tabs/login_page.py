@@ -14,7 +14,7 @@ from PySide6.QtWidgets import (
     QFileDialog, QMessageBox, QTableWidgetItem, QSpinBox,
     QProgressBar
 )
-from PySide6.QtCore import Qt, QTimer
+from PySide6.QtCore import Qt, QTimer, Signal, QObject
 from PySide6.QtGui import QColor
 
 from config import COLORS
@@ -46,6 +46,13 @@ except ImportError:
     HAS_WEBSOCKET = False
 
 
+class LoginSignal(QObject):
+    """Signal để thread-safe UI update"""
+    folders_loaded = Signal(list)
+    profiles_loaded = Signal(list)
+    log_message = Signal(str, str)
+
+
 class LoginPage(QWidget):
     """Login Page - Đăng nhập Facebook - FULL AUTOMATION"""
 
@@ -65,6 +72,12 @@ class LoginPage(QWidget):
         # Running state
         self._is_running = False
         self._stop_requested = False
+
+        # Signal để thread-safe UI update
+        self.signal = LoginSignal()
+        self.signal.folders_loaded.connect(self._on_folders_loaded)
+        self.signal.profiles_loaded.connect(self._on_profiles_loaded)
+        self.signal.log_message.connect(lambda msg, t: self.log(msg, t))
 
         self._setup_ui()
         QTimer.singleShot(500, self._load_folders)
@@ -360,33 +373,38 @@ class LoginPage(QWidget):
 
         def fetch():
             try:
-                return api.get_folders(limit=100)
+                folders = api.get_folders(limit=100)
+                print(f"[DEBUG] LoginPage got {len(folders)} folders")
+                return folders
             except Exception as e:
-                self.log(f"Lỗi kết nối Hidemium: {e}", "error")
+                print(f"[DEBUG] LoginPage folder error: {e}")
+                self.signal.log_message.emit(f"Lỗi kết nối Hidemium: {e}", "error")
                 return []
-
-        def on_complete(folders):
-            self.folders = folders or []
-
-            self.folder_combo.clear()
-            self.folder_combo.addItem("📁 Chọn thư mục")
-            for f in self.folders:
-                name = f.get('name', 'Không rõ')
-                self.folder_combo.addItem(f"📁 {name}")
-
-            self.dest_combo.clear()
-            self.dest_combo.addItem("-- Không chuyển --")
-            for f in self.folders:
-                name = f.get('name', 'Không rõ')
-                self.dest_combo.addItem(f"📁 {name}")
-
-            self.log(f"Đã tải {len(self.folders)} thư mục", "success")
 
         def run():
             result = fetch()
-            QTimer.singleShot(0, lambda: on_complete(result))
+            self.signal.folders_loaded.emit(result)
 
         threading.Thread(target=run, daemon=True).start()
+
+    def _on_folders_loaded(self, folders):
+        """Slot nhận folders từ thread - chạy trên main thread"""
+        self.folders = folders or []
+        print(f"[DEBUG] _on_folders_loaded: {len(self.folders)} folders")
+
+        self.folder_combo.clear()
+        self.folder_combo.addItem("📁 Chọn thư mục")
+        for f in self.folders:
+            name = f.get('name', 'Không rõ')
+            self.folder_combo.addItem(f"📁 {name}")
+
+        self.dest_combo.clear()
+        self.dest_combo.addItem("-- Không chuyển --")
+        for f in self.folders:
+            name = f.get('name', 'Không rõ')
+            self.dest_combo.addItem(f"📁 {name}")
+
+        self.log(f"Đã tải {len(self.folders)} thư mục", "success")
 
     def _on_folder_change(self, index):
         if index > 0:
@@ -405,21 +423,26 @@ class LoginPage(QWidget):
 
         def fetch():
             try:
-                return api.get_profiles(folder_id=[folder_id], limit=500)
-            except:
+                profiles = api.get_profiles(folder_id=[folder_id], limit=500)
+                print(f"[DEBUG] LoginPage got {len(profiles)} profiles")
+                return profiles
+            except Exception as e:
+                print(f"[DEBUG] LoginPage profiles error: {e}")
                 return []
-
-        def on_complete(profiles):
-            self.profiles = profiles or []
-            self._update_table()
-            self._update_stats()
-            self.log(f"Đã tải {len(self.profiles)} profiles", "success")
 
         def run():
             result = fetch()
-            QTimer.singleShot(0, lambda: on_complete(result))
+            self.signal.profiles_loaded.emit(result)
 
         threading.Thread(target=run, daemon=True).start()
+
+    def _on_profiles_loaded(self, profiles):
+        """Slot nhận profiles từ thread - chạy trên main thread"""
+        self.profiles = profiles or []
+        print(f"[DEBUG] _on_profiles_loaded: {len(self.profiles)} profiles")
+        self._update_table()
+        self._update_stats()
+        self.log(f"Đã tải {len(self.profiles)} profiles", "success")
 
     def _update_table(self, filter_type: str = "all"):
         """Cập nhật bảng với profiles"""

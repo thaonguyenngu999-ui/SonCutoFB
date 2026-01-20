@@ -31,6 +31,7 @@ from db import (
 
 class GroupsSignal(QObject):
     """Signal để thread-safe UI update"""
+    data_loaded = Signal(dict)  # folders, profiles, categories
     groups_loaded = Signal(list)
     scan_progress = Signal(int, int)  # current, total
     scan_complete = Signal()
@@ -72,6 +73,7 @@ class GroupsPage(QWidget):
 
         # Signal
         self.signal = GroupsSignal()
+        self.signal.data_loaded.connect(self._on_data_loaded)
         self.signal.groups_loaded.connect(self._on_groups_loaded)
         self.signal.scan_progress.connect(self._on_scan_progress)
         self.signal.scan_complete.connect(self._on_scan_complete)
@@ -814,43 +816,48 @@ class GroupsPage(QWidget):
                 folders = api.get_folders(limit=100)
                 profiles = api.get_profiles(limit=500)
                 categories = get_categories()
+                print(f"[DEBUG] GroupsPage got {len(folders)} folders, {len(profiles)} profiles")
                 return {"folders": folders, "profiles": profiles, "categories": categories}
             except Exception as e:
+                print(f"[DEBUG] GroupsPage load error: {e}")
                 return {"error": str(e)}
-
-        def on_done(result):
-            if "error" in result:
-                self.log(f"Lỗi: {result['error']}", "error")
-                return
-
-            self.folders = result.get("folders", [])
-            self.profiles = result.get("profiles", [])
-            self.categories = result.get("categories", [])
-
-            # Update folder combo
-            self.folder_combo.clear()
-            self.folder_combo.addItem("📁 Tất cả")
-            for f in self.folders:
-                self.folder_combo.addItem(f"📁 {f.get('name', 'Unknown')}")
-
-            # Update profile combo
-            self._update_profile_combo()
-
-            # Update category combo
-            self.cat_combo.clear()
-            for cat in self.categories:
-                self.cat_combo.addItem(f"📁 {cat.get('name', 'Mặc định')}")
-
-            # Update stats
-            self.stat_profiles.set_value(str(len(self.profiles)))
-
-            self.log(f"Đã tải {len(self.profiles)} profiles, {len(self.folders)} folders", "success")
 
         def run():
             result = fetch()
-            QTimer.singleShot(0, lambda: on_done(result))
+            self.signal.data_loaded.emit(result)
 
         threading.Thread(target=run, daemon=True).start()
+
+    def _on_data_loaded(self, result):
+        """Slot nhận data từ thread - chạy trên main thread"""
+        if "error" in result:
+            self.log(f"Lỗi: {result['error']}", "error")
+            return
+
+        self.folders = result.get("folders", [])
+        self.profiles = result.get("profiles", [])
+        self.categories = result.get("categories", [])
+
+        print(f"[DEBUG] _on_data_loaded: {len(self.folders)} folders, {len(self.profiles)} profiles")
+
+        # Update folder combo
+        self.folder_combo.clear()
+        self.folder_combo.addItem("📁 Tất cả")
+        for f in self.folders:
+            self.folder_combo.addItem(f"📁 {f.get('name', 'Unknown')}")
+
+        # Update profile combo
+        self._update_profile_combo()
+
+        # Update category combo
+        self.cat_combo.clear()
+        for cat in self.categories:
+            self.cat_combo.addItem(f"📁 {cat.get('name', 'Mặc định')}")
+
+        # Update stats
+        self.stat_profiles.set_value(str(len(self.profiles)))
+
+        self.log(f"Đã tải {len(self.profiles)} profiles, {len(self.folders)} folders", "success")
 
     def _update_profile_combo(self):
         """Update profile combo based on folder filter"""

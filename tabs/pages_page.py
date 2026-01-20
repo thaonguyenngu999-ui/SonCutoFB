@@ -8,7 +8,7 @@ from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QFrame,
     QMessageBox, QTableWidgetItem, QProgressBar
 )
-from PySide6.QtCore import Qt, QTimer
+from PySide6.QtCore import Qt, QTimer, Signal, QObject
 
 from config import COLORS
 from widgets import (
@@ -20,6 +20,13 @@ from db import (
     get_profiles, get_pages, get_pages_for_profiles, save_page,
     delete_page, delete_pages_bulk, sync_pages, clear_pages, get_pages_count
 )
+
+
+class PagesSignal(QObject):
+    """Signal để thread-safe UI update"""
+    data_loaded = Signal(dict)  # folders, profiles, pages
+    profiles_loaded = Signal(list)
+    log_message = Signal(str, str)
 
 
 class PagesPage(QWidget):
@@ -39,6 +46,12 @@ class PagesPage(QWidget):
         # State
         self._is_scanning = False
 
+        # Signal để thread-safe UI update
+        self.signal = PagesSignal()
+        self.signal.data_loaded.connect(self._on_data_loaded)
+        self.signal.profiles_loaded.connect(self._on_profiles_loaded)
+        self.signal.log_message.connect(lambda msg, t: self.log(msg, t))
+
         self._setup_ui()
         QTimer.singleShot(500, self._load_data)
 
@@ -51,16 +64,16 @@ class PagesPage(QWidget):
         top_bar = QHBoxLayout()
         top_bar.setSpacing(12)
 
-        title = CyberTitle("Pages", "Quan ly Fanpage Facebook", "purple")
+        title = CyberTitle("Pages", "Quản lý Fanpage Facebook", "purple")
         top_bar.addWidget(title)
 
         top_bar.addStretch()
 
-        self.stat_total = CyberStatCard("TONG PAGE", "0", "📄", "purple")
+        self.stat_total = CyberStatCard("TỔNG PAGE", "0", "📄", "purple")
         self.stat_total.setFixedWidth(160)
         top_bar.addWidget(self.stat_total)
 
-        self.stat_selected = CyberStatCard("DA CHON", "0", "✓", "cyan")
+        self.stat_selected = CyberStatCard("ĐÃ CHỌN", "0", "✓", "cyan")
         self.stat_selected.setFixedWidth(160)
         top_bar.addWidget(self.stat_selected)
 
@@ -87,7 +100,7 @@ class PagesPage(QWidget):
         toolbar.addWidget(self.profile_combo)
 
         # Search
-        self.search_input = CyberInput("🔍 Tim kiem Page...")
+        self.search_input = CyberInput("🔍 Tìm kiếm Page...")
         self.search_input.setFixedWidth(200)
         self.search_input.textChanged.connect(self._filter_pages)
         toolbar.addWidget(self.search_input)
@@ -151,7 +164,7 @@ class PagesPage(QWidget):
         self.select_all_cb.stateChanged.connect(self._toggle_select_all)
         select_layout.addWidget(self.select_all_cb)
 
-        select_label = QLabel("Chon tat ca")
+        select_label = QLabel("Chọn tất cả")
         select_label.setStyleSheet(f"color: {COLORS['text_secondary']}; font-size: 12px;")
         select_label.setCursor(Qt.PointingHandCursor)
         select_label.mousePressEvent = lambda e: self.select_all_cb.setChecked(not self.select_all_cb.isChecked())
@@ -203,52 +216,57 @@ class PagesPage(QWidget):
 
     def _load_data(self):
         """Load folders, profiles va pages tu Hidemium va DB"""
-        self.log("Loading data...", "info")
+        self.log("Đang tải dữ liệu...", "info")
 
         def fetch():
             try:
                 folders = api.get_folders(limit=100)
                 profiles = api.get_profiles(limit=500)
                 pages = get_pages()
+                print(f"[DEBUG] PagesPage got {len(folders)} folders, {len(profiles)} profiles")
                 return {"folders": folders or [], "profiles": profiles or [], "pages": pages or []}
             except Exception as e:
+                print(f"[DEBUG] PagesPage load error: {e}")
                 return {"folders": [], "profiles": get_profiles(), "pages": get_pages(), "error": str(e)}
-
-        def on_complete(result):
-            if "error" in result:
-                self.log(f"API Error: {result['error']}", "warning")
-
-            self.folders = result.get("folders", [])
-            self.profiles = result.get("profiles", [])
-            self.pages = result.get("pages", [])
-
-            # Build folder map
-            self.folder_map = {f.get('id'): f.get('name', 'Unknown') for f in self.folders}
-
-            # Update folder combo
-            self.folder_combo.clear()
-            self.folder_combo.addItem("📁 Tat ca folder")
-            for folder in self.folders:
-                self.folder_combo.addItem(f"📁 {folder.get('name', 'Unknown')}")
-
-            # Update profile combo
-            self.profile_combo.clear()
-            self.profile_combo.addItem("👤 Tat ca profile")
-            for profile in self.profiles:
-                name = profile.get('name', 'Unknown')
-                if len(name) > 25:
-                    name = name[:25] + "..."
-                self.profile_combo.addItem(f"👤 {name}")
-
-            self._update_table()
-            self._update_stats()
-            self.log(f"Loaded {len(self.profiles)} profiles, {len(self.pages)} pages", "success")
 
         def run():
             result = fetch()
-            QTimer.singleShot(0, lambda: on_complete(result))
+            self.signal.data_loaded.emit(result)
 
         threading.Thread(target=run, daemon=True).start()
+
+    def _on_data_loaded(self, result):
+        """Slot nhận data từ thread - chạy trên main thread"""
+        if "error" in result:
+            self.log(f"Lỗi API: {result['error']}", "warning")
+
+        self.folders = result.get("folders", [])
+        self.profiles = result.get("profiles", [])
+        self.pages = result.get("pages", [])
+
+        print(f"[DEBUG] _on_data_loaded: {len(self.folders)} folders, {len(self.profiles)} profiles")
+
+        # Build folder map
+        self.folder_map = {f.get('id'): f.get('name', 'Unknown') for f in self.folders}
+
+        # Update folder combo
+        self.folder_combo.clear()
+        self.folder_combo.addItem("📁 Tất cả folder")
+        for folder in self.folders:
+            self.folder_combo.addItem(f"📁 {folder.get('name', 'Unknown')}")
+
+        # Update profile combo
+        self.profile_combo.clear()
+        self.profile_combo.addItem("👤 Tất cả profile")
+        for profile in self.profiles:
+            name = profile.get('name', 'Unknown')
+            if len(name) > 25:
+                name = name[:25] + "..."
+            self.profile_combo.addItem(f"👤 {name}")
+
+        self._update_table()
+        self._update_stats()
+        self.log(f"Đã tải {len(self.profiles)} profiles, {len(self.pages)} pages", "success")
 
     def _on_folder_change(self, index):
         """Khi thay doi folder filter"""
@@ -262,42 +280,50 @@ class PagesPage(QWidget):
 
     def _load_profiles_for_folder(self, folder_id):
         """Load profiles theo folder"""
+        self._current_folder_id = folder_id  # Store for use in thread
+
         def fetch():
             try:
                 if folder_id:
-                    return api.get_profiles(folder_id=[folder_id], limit=500)
+                    profiles = api.get_profiles(folder_id=[folder_id], limit=500)
                 else:
-                    return api.get_profiles(limit=500)
-            except:
+                    profiles = api.get_profiles(limit=500)
+                print(f"[DEBUG] PagesPage load profiles got {len(profiles or [])} profiles")
+                return profiles or []
+            except Exception as e:
+                print(f"[DEBUG] PagesPage load profiles error: {e}")
                 return get_profiles()
-
-        def on_complete(profiles):
-            self.profiles = profiles or []
-
-            # Update profile combo
-            self.profile_combo.clear()
-            self.profile_combo.addItem("👤 Tat ca profile")
-            for profile in self.profiles:
-                name = profile.get('name', 'Unknown')
-                if len(name) > 25:
-                    name = name[:25] + "..."
-                self.profile_combo.addItem(f"👤 {name}")
-
-            self._filter_pages_by_profile()
-            self._update_stats()
 
         def run():
             result = fetch()
-            QTimer.singleShot(0, lambda: on_complete(result))
+            self.signal.profiles_loaded.emit(result)
 
         threading.Thread(target=run, daemon=True).start()
+
+    def _on_profiles_loaded(self, profiles):
+        """Slot nhận profiles từ thread - chạy trên main thread"""
+        self.profiles = profiles or []
+
+        print(f"[DEBUG] _on_profiles_loaded: {len(self.profiles)} profiles")
+
+        # Update profile combo
+        self.profile_combo.clear()
+        self.profile_combo.addItem("👤 Tất cả profile")
+        for profile in self.profiles:
+            name = profile.get('name', 'Unknown')
+            if len(name) > 25:
+                name = name[:25] + "..."
+            self.profile_combo.addItem(f"👤 {name}")
+
+        self._filter_pages_by_profile()
+        self._update_stats()
 
     def _on_profile_change(self, index):
         """Khi thay doi profile filter"""
         self._filter_pages_by_profile()
 
     def _filter_pages_by_profile(self):
-        """Filter pages theo profile da chon"""
+        """Filter pages theo profile đã chọn"""
         profile_idx = self.profile_combo.currentIndex()
 
         if profile_idx <= 0:
@@ -397,13 +423,13 @@ class PagesPage(QWidget):
             cb.setChecked(checked)
             if checked:
                 count += 1
-        self.selected_label.setText(f"✓ {count} da chon" if checked else "")
+        self.selected_label.setText(f"✓ {count} đã chọn" if checked else "")
         self._update_stats()
 
     def _update_selection_count(self):
-        """Cap nhat so luong da chon"""
+        """Cap nhat so luong đã chọn"""
         count = sum(1 for cb in self.page_checkboxes.values() if cb.isChecked())
-        self.selected_label.setText(f"✓ {count} da chon" if count > 0 else "")
+        self.selected_label.setText(f"✓ {count} đã chọn" if count > 0 else "")
         self.stat_selected.set_value(str(count))
 
     def _update_stats(self):
@@ -416,7 +442,7 @@ class PagesPage(QWidget):
     def _scan_pages(self):
         """Scan pages tu profiles"""
         if self._is_scanning:
-            QMessageBox.warning(self, "Thong bao", "Dang scan, vui long doi...")
+            QMessageBox.warning(self, "Thông báo", "Đang scan, vui lòng đợi...")
             return
 
         # Get selected profile or all profiles
@@ -427,12 +453,12 @@ class PagesPage(QWidget):
             profiles_to_scan = [self.profiles[profile_idx - 1]]
 
         if not profiles_to_scan:
-            QMessageBox.warning(self, "Loi", "Khong co profile nao de scan!")
+            QMessageBox.warning(self, "Loi", "Không có profile nào để scan!")
             return
 
         reply = QMessageBox.question(
-            self, "Xac nhan",
-            f"Scan pages tu {len(profiles_to_scan)} profiles?\n\nLuu y: Tinh nang nay can mo browser va dang nhap Facebook.",
+            self, "Xác nhận",
+            f"Scan pages tu {len(profiles_to_scan)} profiles?\n\nLưu ý: Tính năng này cần mở browser và đăng nhập Facebook.",
             QMessageBox.Yes | QMessageBox.No
         )
 
@@ -443,7 +469,7 @@ class PagesPage(QWidget):
         self.progress_bar.setVisible(True)
         self.progress_bar.setMaximum(len(profiles_to_scan))
         self.progress_bar.setValue(0)
-        self.log(f"Bat dau scan {len(profiles_to_scan)} profiles...", "info")
+        self.log(f"Bắt đầu scan {len(profiles_to_scan)} profiles...", "info")
 
         def do_scan():
             total_pages = 0
@@ -472,26 +498,26 @@ class PagesPage(QWidget):
             self._is_scanning = False
             QTimer.singleShot(0, lambda: self.progress_bar.setVisible(False))
             QTimer.singleShot(0, lambda: self.progress_label.setText(""))
-            QTimer.singleShot(0, lambda: self.log("Scan hoan thanh!", "success"))
+            QTimer.singleShot(0, lambda: self.log("Scan hoàn thành!", "success"))
             QTimer.singleShot(0, self._filter_pages_by_profile)
 
         threading.Thread(target=do_scan, daemon=True).start()
 
     def _delete_selected_pages(self):
-        """Xoa cac pages da chon"""
+        """Xoa cac pages đã chọn"""
         selected_ids = [pid for pid, cb in self.page_checkboxes.items() if cb.isChecked()]
 
         if not selected_ids:
-            QMessageBox.warning(self, "Loi", "Chua chon page nao!")
+            QMessageBox.warning(self, "Loi", "Chưa chọn page nào!")
             return
 
         reply = QMessageBox.question(
-            self, "Xac nhan",
-            f"Ban co chac muon xoa {len(selected_ids)} pages?",
+            self, "Xác nhận",
+            f"Bạn có chắc muốn xóa {len(selected_ids)} pages?",
             QMessageBox.Yes | QMessageBox.No
         )
 
         if reply == QMessageBox.Yes:
             deleted = delete_pages_bulk(selected_ids)
-            self.log(f"Da xoa {deleted} pages", "success")
+            self.log(f"Đã xóa {deleted} pages", "success")
             self._filter_pages_by_profile()

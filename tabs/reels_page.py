@@ -1,5 +1,5 @@
 """
-Reels Page - Dang Reels len Fanpage
+Reels Page - Đăng Reels lên Fanpage
 PySide6 version - BEAUTIFUL UI like ProfilesPage
 """
 import threading
@@ -11,7 +11,7 @@ from PySide6.QtWidgets import (
     QFileDialog, QMessageBox, QTableWidgetItem, QSpinBox,
     QTextEdit, QDateTimeEdit
 )
-from PySide6.QtCore import Qt, QTimer, QDateTime
+from PySide6.QtCore import Qt, QTimer, QDateTime, Signal, QObject
 
 from config import COLORS
 from widgets import (
@@ -24,6 +24,13 @@ from db import (
     get_reel_schedules, save_reel_schedule, delete_reel_schedule,
     get_posted_reels, save_posted_reel, get_posted_reels_count
 )
+
+
+class ReelsSignal(QObject):
+    """Signal để thread-safe UI update"""
+    folders_loaded = Signal(list)
+    profiles_loaded = Signal(list)
+    log_message = Signal(str, str)
 
 
 class ReelsPage(QWidget):
@@ -46,6 +53,12 @@ class ReelsPage(QWidget):
         # Running state
         self._is_posting = False
 
+        # Signal để thread-safe UI update
+        self.signal = ReelsSignal()
+        self.signal.folders_loaded.connect(self._on_folders_loaded)
+        self.signal.profiles_loaded.connect(self._on_profiles_loaded)
+        self.signal.log_message.connect(lambda msg, t: self.log(msg, t))
+
         self._setup_ui()
         QTimer.singleShot(500, self._load_folders)
 
@@ -58,7 +71,7 @@ class ReelsPage(QWidget):
         top_bar = QHBoxLayout()
         top_bar.setSpacing(12)
 
-        title = CyberTitle("Reels", "Dang Reels len Fanpage", "pink")
+        title = CyberTitle("Reels", "Đăng Reels lên Fanpage", "pink")
         top_bar.addWidget(title)
 
         top_bar.addStretch()
@@ -71,11 +84,11 @@ class ReelsPage(QWidget):
         self.stat_pages.setFixedWidth(160)
         top_bar.addWidget(self.stat_pages)
 
-        self.stat_scheduled = CyberStatCard("DA HEN", "0", "📅", "cyan")
+        self.stat_scheduled = CyberStatCard("ĐÃ HẸN", "0", "📅", "cyan")
         self.stat_scheduled.setFixedWidth(160)
         top_bar.addWidget(self.stat_scheduled)
 
-        self.stat_posted = CyberStatCard("DA DANG", "0", "🎬", "mint")
+        self.stat_posted = CyberStatCard("ĐÃ ĐĂNG", "0", "🎬", "mint")
         self.stat_posted.setFixedWidth(160)
         top_bar.addWidget(self.stat_posted)
 
@@ -122,7 +135,7 @@ class ReelsPage(QWidget):
         form_header_layout = QHBoxLayout(form_header)
         form_header_layout.setContentsMargins(12, 0, 12, 0)
 
-        form_title = QLabel("🎬 TAO REEL MOI")
+        form_title = QLabel("🎬 TẠO REEL MỚI")
         form_title.setStyleSheet(f"color: {COLORS['neon_pink']}; font-size: 12px; font-weight: bold; letter-spacing: 2px;")
         form_header_layout.addWidget(form_title)
         form_header_layout.addStretch()
@@ -136,7 +149,7 @@ class ReelsPage(QWidget):
         profile_label.setFixedWidth(80)
         profile_row.addWidget(profile_label)
 
-        self.profile_combo = CyberComboBox(["-- Chon Profile --"])
+        self.profile_combo = CyberComboBox(["-- Chọn Profile --"])
         self.profile_combo.currentIndexChanged.connect(self._on_profile_change)
         profile_row.addWidget(self.profile_combo, 1)
 
@@ -149,7 +162,7 @@ class ReelsPage(QWidget):
         page_label.setFixedWidth(80)
         page_row.addWidget(page_label)
 
-        self.page_combo = CyberComboBox(["-- Chon Page --"])
+        self.page_combo = CyberComboBox(["-- Chọn Page --"])
         page_row.addWidget(self.page_combo, 1)
 
         left_layout.addLayout(page_row)
@@ -161,7 +174,7 @@ class ReelsPage(QWidget):
         video_label.setFixedWidth(80)
         video_row.addWidget(video_label)
 
-        self.video_input = CyberInput("Chon file video...")
+        self.video_input = CyberInput("Chọn file video...")
         self.video_input.setReadOnly(True)
         video_row.addWidget(self.video_input, 1)
 
@@ -179,7 +192,7 @@ class ReelsPage(QWidget):
 
         self.caption_text = QTextEdit()
         self.caption_text.setFixedHeight(100)
-        self.caption_text.setPlaceholderText("Nhap caption cho Reel...")
+        self.caption_text.setPlaceholderText("Nhập caption cho Reel...")
         self.caption_text.setStyleSheet(f"""
             QTextEdit {{
                 background: {COLORS['bg_card']};
@@ -208,7 +221,7 @@ class ReelsPage(QWidget):
         left_layout.addLayout(hashtag_row)
 
         # Schedule section
-        schedule_title = QLabel("📅 HEN GIO")
+        schedule_title = QLabel("📅 HẸN GIỜ")
         schedule_title.setStyleSheet(f"color: {COLORS['neon_purple']}; font-size: 11px; font-weight: bold; letter-spacing: 1px;")
         left_layout.addWidget(schedule_title)
 
@@ -216,7 +229,7 @@ class ReelsPage(QWidget):
         self.schedule_cb = CyberCheckBox()
         schedule_row.addWidget(self.schedule_cb)
 
-        schedule_text = QLabel("Hen gio dang")
+        schedule_text = QLabel("Hẹn giờ đăng")
         schedule_text.setStyleSheet(f"color: {COLORS['text_secondary']}; font-size: 12px;")
         schedule_row.addWidget(schedule_text)
 
@@ -296,15 +309,15 @@ class ReelsPage(QWidget):
         left_layout.addStretch()
 
         # Actions
-        actions_title = QLabel("🚀 HANH DONG")
+        actions_title = QLabel("🚀 HÀNH ĐỘNG")
         actions_title.setStyleSheet(f"color: {COLORS['neon_mint']}; font-size: 11px; font-weight: bold; letter-spacing: 1px;")
         left_layout.addWidget(actions_title)
 
-        btn_post = CyberButton("DANG NGAY", "success", "🚀")
+        btn_post = CyberButton("ĐĂNG NGAY", "success", "🚀")
         btn_post.clicked.connect(self._post_reel_now)
         left_layout.addWidget(btn_post)
 
-        btn_schedule = CyberButton("HEN LICH", "cyan", "📅")
+        btn_schedule = CyberButton("HẸN LỊCH", "cyan", "📅")
         btn_schedule.clicked.connect(self._schedule_reel)
         left_layout.addWidget(btn_schedule)
 
@@ -330,12 +343,12 @@ class ReelsPage(QWidget):
         header_layout.setSpacing(12)
 
         # Tabs
-        self.btn_scheduled = CyberButton("DA HEN", "primary", "📅")
+        self.btn_scheduled = CyberButton("ĐÃ HẸN", "primary", "📅")
         self.btn_scheduled.setFixedWidth(120)
         self.btn_scheduled.clicked.connect(lambda: self._show_tab("scheduled"))
         header_layout.addWidget(self.btn_scheduled)
 
-        self.btn_posted = CyberButton("DA DANG", "secondary", "🎬")
+        self.btn_posted = CyberButton("ĐÃ ĐĂNG", "secondary", "🎬")
         self.btn_posted.setFixedWidth(120)
         self.btn_posted.clicked.connect(lambda: self._show_tab("posted"))
         header_layout.addWidget(self.btn_posted)
@@ -346,7 +359,7 @@ class ReelsPage(QWidget):
         sep.setStyleSheet(f"background: {COLORS['border']};")
         header_layout.addWidget(sep)
 
-        header_title = QLabel("🎬 LICH SU REELS")
+        header_title = QLabel("🎬 LỊCH SỬ REELS")
         header_title.setStyleSheet(f"color: {COLORS['neon_purple']}; font-size: 12px; font-weight: bold; letter-spacing: 2px;")
         header_layout.addWidget(header_title)
 
@@ -372,39 +385,45 @@ class ReelsPage(QWidget):
         layout.addLayout(content, 1)
 
     def _load_folders(self):
-        """Load folders tu Hidemium"""
-        self.log("Loading folders...", "info")
+        """Load folders từ Hidemium"""
+        self.log("Đang tải thư mục...", "info")
 
         def fetch():
             try:
-                return api.get_folders(limit=100)
+                folders = api.get_folders(limit=100)
+                print(f"[DEBUG] ReelsPage got {len(folders)} folders")
+                return folders
             except Exception as e:
+                print(f"[DEBUG] ReelsPage folder error: {e}")
                 return []
-
-        def on_complete(folders):
-            self.folders = folders or []
-
-            self.folder_combo.clear()
-            self.folder_combo.addItem("📁 Chon folder")
-            for f in self.folders:
-                name = f.get('name', 'Unknown')
-                self.folder_combo.addItem(f"📁 {name}")
-
-            self.log(f"Loaded {len(self.folders)} folders", "success")
-            self._load_history()
 
         def run():
             result = fetch()
-            QTimer.singleShot(0, lambda: on_complete(result))
+            self.signal.folders_loaded.emit(result)
 
         threading.Thread(target=run, daemon=True).start()
+
+    def _on_folders_loaded(self, folders):
+        """Slot nhận folders từ thread - chạy trên main thread"""
+        self.folders = folders or []
+
+        print(f"[DEBUG] _on_folders_loaded: {len(self.folders)} folders")
+
+        self.folder_combo.clear()
+        self.folder_combo.addItem("📁 Chọn folder")
+        for f in self.folders:
+            name = f.get('name', 'Unknown')
+            self.folder_combo.addItem(f"📁 {name}")
+
+        self.log(f"Đã tải {len(self.folders)} thư mục", "success")
+        self._load_history()
 
     def _on_folder_change(self, index):
         if index > 0:
             self._load_profiles()
 
     def _load_profiles(self):
-        """Load profiles tu folder"""
+        """Load profiles từ folder"""
         folder_idx = self.folder_combo.currentIndex()
         if folder_idx <= 0:
             return
@@ -412,37 +431,43 @@ class ReelsPage(QWidget):
         folder = self.folders[folder_idx - 1]
         folder_id = folder.get('id')
 
-        self.log(f"Loading profiles from {folder.get('name')}...", "info")
+        self.log(f"Đang tải profiles từ {folder.get('name')}...", "info")
 
         def fetch():
             try:
-                return api.get_profiles(folder_id=[folder_id], limit=500)
-            except:
+                profiles = api.get_profiles(folder_id=[folder_id], limit=500)
+                print(f"[DEBUG] ReelsPage got {len(profiles)} profiles")
+                return profiles
+            except Exception as e:
+                print(f"[DEBUG] ReelsPage profiles error: {e}")
                 return []
-
-        def on_complete(profiles):
-            self.profiles = profiles or []
-
-            self.profile_combo.clear()
-            self.profile_combo.addItem("-- Chon Profile --")
-            for p in self.profiles:
-                name = p.get('name', 'Unknown')
-                self.profile_combo.addItem(f"👤 {name}")
-
-            self.stat_profiles.set_value(str(len(self.profiles)))
-            self.log(f"Loaded {len(self.profiles)} profiles", "success")
 
         def run():
             result = fetch()
-            QTimer.singleShot(0, lambda: on_complete(result))
+            self.signal.profiles_loaded.emit(result)
 
         threading.Thread(target=run, daemon=True).start()
+
+    def _on_profiles_loaded(self, profiles):
+        """Slot nhận profiles từ thread - chạy trên main thread"""
+        self.profiles = profiles or []
+
+        print(f"[DEBUG] _on_profiles_loaded: {len(self.profiles)} profiles")
+
+        self.profile_combo.clear()
+        self.profile_combo.addItem("-- Chọn Profile --")
+        for p in self.profiles:
+            name = p.get('name', 'Unknown')
+            self.profile_combo.addItem(f"👤 {name}")
+
+        self.stat_profiles.set_value(str(len(self.profiles)))
+        self.log(f"Đã tải {len(self.profiles)} profiles", "success")
 
     def _on_profile_change(self, index):
         """Khi thay doi profile"""
         if index <= 0:
             self.page_combo.clear()
-            self.page_combo.addItem("-- Chon Page --")
+            self.page_combo.addItem("-- Chọn Page --")
             self.selected_profile_uuid = None
             self.stat_pages.set_value("0")
             return
@@ -454,7 +479,7 @@ class ReelsPage(QWidget):
         self.pages = get_pages(self.selected_profile_uuid)
 
         self.page_combo.clear()
-        self.page_combo.addItem("-- Chon Page --")
+        self.page_combo.addItem("-- Chọn Page --")
         for page in self.pages:
             name = page.get('page_name', 'Unknown')
             self.page_combo.addItem(f"📄 {name}")
@@ -462,9 +487,9 @@ class ReelsPage(QWidget):
         self.stat_pages.set_value(str(len(self.pages)))
 
     def _browse_video(self):
-        """Chon file video"""
+        """Chọn file video"""
         path, _ = QFileDialog.getOpenFileName(
-            self, "Chon video",
+            self, "Chọn video",
             "", "Video Files (*.mp4 *.mov *.avi *.mkv *.webm)"
         )
 
@@ -476,19 +501,19 @@ class ReelsPage(QWidget):
     def _validate_inputs(self):
         """Validate inputs"""
         if not self.selected_profile_uuid:
-            QMessageBox.warning(self, "Loi", "Chua chon profile!")
+            QMessageBox.warning(self, "Loi", "Chưa chọn profile!")
             return False
 
         if self.page_combo.currentIndex() <= 0:
-            QMessageBox.warning(self, "Loi", "Chua chon page!")
+            QMessageBox.warning(self, "Loi", "Chưa chọn page!")
             return False
 
         if not self.video_path:
-            QMessageBox.warning(self, "Loi", "Chua chon video!")
+            QMessageBox.warning(self, "Loi", "Chưa chọn video!")
             return False
 
         if not os.path.exists(self.video_path):
-            QMessageBox.warning(self, "Loi", "File video khong ton tai!")
+            QMessageBox.warning(self, "Loi", "File video không tồn tại!")
             return False
 
         return True
@@ -499,12 +524,12 @@ class ReelsPage(QWidget):
             return
 
         if self._is_posting:
-            QMessageBox.warning(self, "Thong bao", "Dang trong qua trinh dang...")
+            QMessageBox.warning(self, "Thông báo", "Đang trong quá trình đăng...")
             return
 
         self._is_posting = True
-        self.log("Bat dau dang Reel...", "info")
-        self.progress_label.setText("Dang xu ly...")
+        self.log("Bắt đầu đăng Reel...", "info")
+        self.progress_label.setText("Đang xử lý...")
 
         page_idx = self.page_combo.currentIndex()
         page = self.pages[page_idx - 1] if page_idx > 0 else {}
@@ -532,8 +557,8 @@ class ReelsPage(QWidget):
         self._is_posting = False
 
         if success:
-            self.progress_label.setText("Da dang thanh cong!")
-            self.log("Reel da duoc dang!", "success")
+            self.progress_label.setText("Đã đăng thành công!")
+            self.log("Reel đã được đăng!", "success")
             self._load_history()
 
             # Clear form
@@ -541,8 +566,8 @@ class ReelsPage(QWidget):
             self.video_path = ""
             self.video_input.clear()
         else:
-            self.progress_label.setText("Loi khi dang!")
-            self.log("Loi dang Reel", "error")
+            self.progress_label.setText("Lỗi khi đăng!")
+            self.log("Lỗi đăng Reel", "error")
 
     def _schedule_reel(self):
         """Hen lich dang Reel"""
@@ -550,7 +575,7 @@ class ReelsPage(QWidget):
             return
 
         if not self.schedule_cb.isChecked():
-            QMessageBox.warning(self, "Loi", "Chua bat hen gio!")
+            QMessageBox.warning(self, "Loi", "Chưa bật hẹn giờ!")
             return
 
         page_idx = self.page_combo.currentIndex()
@@ -559,7 +584,7 @@ class ReelsPage(QWidget):
         schedule_time = self.schedule_datetime.dateTime().toPython()
 
         if schedule_time <= datetime.now():
-            QMessageBox.warning(self, "Loi", "Thoi gian hen phai lon hon hien tai!")
+            QMessageBox.warning(self, "Loi", "Thời gian hẹn phải lớn hơn hiện tại!")
             return
 
         save_reel_schedule({
@@ -574,8 +599,8 @@ class ReelsPage(QWidget):
             'delay_max': self.delay_max.value()
         })
 
-        self.log(f"Da hen lich dang luc {schedule_time.strftime('%d/%m/%Y %H:%M')}", "success")
-        self.progress_label.setText(f"Hen luc {schedule_time.strftime('%H:%M %d/%m')}")
+        self.log(f"Đã hẹn lịch đăng lúc {schedule_time.strftime('%d/%m/%Y %H:%M')}", "success")
+        self.progress_label.setText(f"Hẹn lúc {schedule_time.strftime('%H:%M %d/%m')}")
 
         # Clear form
         self.caption_text.clear()
@@ -642,7 +667,7 @@ class ReelsPage(QWidget):
                 }}
             """)
             items = self.posted_reels
-            self.count_label.setText(f"[{len(items)} da dang]")
+            self.count_label.setText(f"[{len(items)} đã đăng]")
 
         self.table.setRowCount(len(items))
 
@@ -666,11 +691,11 @@ class ReelsPage(QWidget):
 
             # Status
             if tab == "scheduled":
-                status_text = "📅 Cho dang"
+                status_text = "📅 Chờ đăng"
             else:
                 status = item.get('status', '')
                 if status == 'success':
-                    status_text = "✅ Thanh cong"
+                    status_text = "✅ Thành công"
                 else:
                     status_text = "❌ Loi"
             self.table.setItem(row, 3, QTableWidgetItem(status_text))
@@ -697,13 +722,13 @@ class ReelsPage(QWidget):
         """Xoa schedule"""
         if schedule_id:
             reply = QMessageBox.question(
-                self, "Xac nhan",
-                "Ban co chac muon xoa lich hen nay?",
+                self, "Xác nhận",
+                "Bạn có chắc muốn xóa lịch hẹn này?",
                 QMessageBox.Yes | QMessageBox.No,
                 QMessageBox.No
             )
 
             if reply == QMessageBox.Yes:
                 delete_reel_schedule(schedule_id)
-                self.log("Da xoa lich hen", "success")
+                self.log("Đã xóa lịch hẹn", "success")
                 self._load_history()
