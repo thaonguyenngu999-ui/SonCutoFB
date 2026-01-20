@@ -17,16 +17,17 @@ from config import COLORS
 
 
 class CyberButton(QPushButton):
-    """Button COMPACT 🐱"""
-    
+    """Button đơn giản với màu neon"""
+
     def __init__(self, text: str, variant: str = "primary", icon: str = None, parent=None):
         display_text = f"{icon} {text}" if icon else text
         super().__init__(display_text, parent)
-        
+
         self.variant = variant
         self.setCursor(QCursor(Qt.PointingHandCursor))
         self.setFixedHeight(32)
-        
+        self.setMinimumWidth(60)
+
         colors = {
             "primary": (COLORS["neon_pink"], COLORS["neon_purple"]),
             "success": (COLORS["neon_mint"], COLORS["neon_cyan"]),
@@ -34,25 +35,18 @@ class CyberButton(QPushButton):
             "warning": (COLORS["neon_yellow"], COLORS["neon_coral"]),
             "purple": (COLORS["neon_purple"], COLORS["neon_blue"]),
             "cyan": (COLORS["neon_cyan"], COLORS["neon_mint"]),
-            "ghost": (COLORS["text_muted"], COLORS["text_muted"]),
+            "ghost": (COLORS["text_muted"], COLORS["border"]),
         }
-        
+
         self.color1, self.color2 = colors.get(variant, colors["primary"])
         self._apply_style()
-        
-        self.glow = QGraphicsDropShadowEffect(self)
-        self.glow.setBlurRadius(0)
-        self.glow.setColor(QColor(self.color1))
-        self.glow.setOffset(0, 0)
-        self.setGraphicsEffect(self.glow)
-    
+
     def _apply_style(self):
-        # Text color khi hover - dùng màu tối cho nền sáng
-        hover_text = "#0a0a14" if self.variant != "ghost" else COLORS["text_primary"]
+        hover_text = "#0a0a14"
 
         self.setStyleSheet(f"""
             QPushButton {{
-                background: transparent;
+                background-color: transparent;
                 border: 2px solid {self.color1};
                 border-radius: 10px;
                 color: {self.color1};
@@ -61,23 +55,14 @@ class CyberButton(QPushButton):
                 font-size: 11px;
             }}
             QPushButton:hover {{
-                background: {self.color1};
-                border-color: {self.color1};
+                background-color: {self.color1};
                 color: {hover_text};
             }}
             QPushButton:pressed {{
-                background: {self.color2};
+                background-color: {self.color2};
                 color: {hover_text};
             }}
         """)
-    
-    def enterEvent(self, event):
-        self.glow.setBlurRadius(15)
-        super().enterEvent(event)
-    
-    def leaveEvent(self, event):
-        self.glow.setBlurRadius(0)
-        super().leaveEvent(event)
 
 
 class ToggleButton(QPushButton):
