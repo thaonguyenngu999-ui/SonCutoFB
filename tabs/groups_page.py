@@ -1,6 +1,7 @@
 """
 Groups Page - Đăng nhóm Facebook
 PySide6 version với 3 TABS: Quét nhóm, Đăng nhóm, Đẩy tin
+HỖ TRỢ: Multi-profile posting, Parallel scanning với ThreadPoolExecutor
 """
 import threading
 import random
@@ -8,6 +9,7 @@ import time
 import os
 from typing import List, Dict, Optional
 from datetime import datetime, date, timedelta
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QFrame,
     QMessageBox, QProgressBar, QTableWidgetItem, QSpinBox,
@@ -81,6 +83,11 @@ class GroupsPage(QWidget):
         self.scan_group_checkboxes: Dict[int, CyberCheckBox] = {}
         self.post_group_checkboxes: Dict[int, CyberCheckBox] = {}
         self.boost_checkboxes: Dict[int, CyberCheckBox] = {}
+
+        # Multi-profile support
+        self.profile_groups: Dict[str, List[Dict]] = {}  # profile_uuid -> groups
+        self._scan_completed_count = 0
+        self._multi_profile_mode = False
 
         # State
         self._is_scanning = False
@@ -975,7 +982,7 @@ class GroupsPage(QWidget):
             self.scan_table.setItem(row, 5, QTableWidgetItem(scan_date))
 
     def _scan_groups(self):
-        """Start scanning groups - MỞ BROWSER THẬT VÀ QUÉT"""
+        """Start scanning groups - PARALLEL SCANNING với ThreadPoolExecutor"""
         if not self.selected_profile_uuids:
             QMessageBox.warning(self, "Thông báo", "Vui lòng chọn profile trước!")
             return
@@ -986,29 +993,60 @@ class GroupsPage(QWidget):
 
         self._is_scanning = True
         self._stop_requested = False
+        self._scan_completed_count = 0
         self.btn_scan.setEnabled(False)
         self.btn_stop_scan.setEnabled(True)
-        self.log("Bắt đầu quét nhóm - đang mở browser...", "info")
+        self.log("Bắt đầu quét nhóm song song...", "info")
 
-        def scan():
+        profiles_to_scan = list(self.selected_profile_uuids)
+
+        def do_parallel_scan():
+            """Quét song song nhiều profiles với ThreadPoolExecutor"""
             try:
                 all_groups = []
-                total = len(self.selected_profile_uuids)
+                total = len(profiles_to_scan)
 
-                for i, profile_uuid in enumerate(self.selected_profile_uuids):
-                    if self._stop_requested:
-                        break
+                def scan_single_profile(profile_uuid: str) -> List[Dict]:
+                    """Quét 1 profile"""
+                    try:
+                        return self._execute_group_scan_for_profile(profile_uuid)
+                    except Exception as e:
+                        print(f"[ERROR] Scan profile {profile_uuid}: {e}")
+                        return []
 
-                    self.signal.log_message.emit(f"Quét profile {i+1}/{total}...", "info")
+                # Chạy song song (max 3 browser cùng lúc để tránh quá tải)
+                max_workers = min(total, 3)
+                with ThreadPoolExecutor(max_workers=max_workers) as executor:
+                    future_to_uuid = {
+                        executor.submit(scan_single_profile, uuid): uuid
+                        for uuid in profiles_to_scan
+                    }
 
-                    # Quét nhóm cho profile này
-                    groups = self._execute_group_scan_for_profile(profile_uuid)
-                    all_groups.extend(groups)
+                    for future in as_completed(future_to_uuid):
+                        if self._stop_requested:
+                            break
 
-                    self.signal.scan_progress.emit(i + 1, total)
+                        uuid = future_to_uuid[future]
+                        try:
+                            result = future.result()
+                            all_groups.extend(result)
+
+                            # Lưu vào profile_groups
+                            self.profile_groups[uuid] = result
+
+                            self._scan_completed_count += 1
+                            self.signal.scan_progress.emit(self._scan_completed_count, total)
+
+                            profile_name = next((p.get('name', 'Unknown')[:20] for p in self.profiles if p.get('uuid') == uuid), 'Unknown')
+                            self.signal.log_message.emit(
+                                f"[{self._scan_completed_count}/{total}] {profile_name}: {len(result)} nhóm",
+                                "success"
+                            )
+                        except Exception as e:
+                            print(f"[ERROR] Scan {uuid}: {e}")
 
                 self.signal.scan_complete.emit()
-                self.signal.log_message.emit(f"Quét xong! Tìm thấy {len(all_groups)} nhóm", "success")
+                self.signal.log_message.emit(f"Quét xong! Tìm thấy {len(all_groups)} nhóm từ {total} profiles", "success")
 
             except Exception as e:
                 import traceback
@@ -1016,7 +1054,7 @@ class GroupsPage(QWidget):
                 self.signal.log_message.emit(f"Lỗi quét: {str(e)}", "error")
                 self.signal.scan_complete.emit()
 
-        threading.Thread(target=scan, daemon=True).start()
+        threading.Thread(target=do_parallel_scan, daemon=True).start()
 
     def _execute_group_scan_for_profile(self, profile_uuid: str):
         """Quét nhóm cho 1 profile - GIỐNG CODE GỐC"""
@@ -1337,7 +1375,7 @@ class GroupsPage(QWidget):
             self.img_count_label.setText(f"(Tổng: {count} ảnh)")
 
     def _start_posting(self):
-        """Start posting to groups - MỞ BROWSER VÀ ĐĂNG THẬT"""
+        """Start posting to groups - HỖ TRỢ MULTI-PROFILE"""
         selected_groups = [g for g in self.groups if g.get('id') in self.post_group_checkboxes
                           and self.post_group_checkboxes[g.get('id')].isChecked()]
 
@@ -1355,191 +1393,207 @@ class GroupsPage(QWidget):
             QMessageBox.warning(self, "Thông báo", "Vui lòng chọn nội dung để đăng!")
             return
 
+        # Xây dựng posting tasks - hỗ trợ multi-profile
+        posting_tasks = []
+        selected_group_ids = set(g.get('id') for g in selected_groups)
+
+        if self._multi_profile_mode and self.profile_groups:
+            # Multi-profile mode: mỗi profile đăng vào groups của nó
+            for profile_uuid in self.selected_profile_uuids:
+                profile_all_groups = self.profile_groups.get(profile_uuid, [])
+                profile_selected_groups = [g for g in profile_all_groups if g.get('id') in selected_group_ids]
+                if profile_selected_groups:
+                    posting_tasks.append((profile_uuid, profile_selected_groups))
+        else:
+            # Single profile mode
+            posting_tasks.append((self.selected_profile_uuids[0], selected_groups))
+
+        if not posting_tasks:
+            QMessageBox.warning(self, "Thông báo", "Không có nhóm nào để đăng!")
+            return
+
+        total_groups = sum(len(groups) for _, groups in posting_tasks)
         self._is_posting = True
         self._stop_requested = False
         self.btn_post.setEnabled(False)
         self.btn_stop_post.setEnabled(True)
-        self.log(f"Bắt đầu đăng vào {len(selected_groups)} nhóm...", "info")
+        self.log(f"Bắt đầu đăng vào {total_groups} nhóm từ {len(posting_tasks)} profile...", "info")
 
-        def post():
-            try:
-                profile_uuid = self.selected_profile_uuids[0]
-                slot_id = acquire_window_slot()
+        def execute_all_posting():
+            """Thực hiện posting cho tất cả profiles"""
+            completed_count = 0
 
-                # Mở browser
-                self.signal.log_message.emit(f"Mở browser...", "info")
-                result = api.open_browser(profile_uuid)
+            for profile_uuid, groups in posting_tasks:
+                if self._stop_requested:
+                    break
 
-                status = result.get('status') or result.get('type')
-                if status not in ['successfully', 'success', True]:
-                    if 'already' not in str(result).lower():
-                        self.signal.log_message.emit(f"Không mở được browser", "error")
-                        release_window_slot(slot_id)
-                        self.signal.post_complete.emit()
-                        return
+                profile_name = next((p.get('name', 'Unknown')[:20] for p in self.profiles if p.get('uuid') == profile_uuid), 'Unknown')
+                self.signal.log_message.emit(f"Đang đăng với profile: {profile_name}", "info")
 
-                # Lấy CDP port
-                data = result.get('data', {})
-                remote_port = data.get('remote_port')
-                ws_url = data.get('web_socket', '')
+                try:
+                    self._execute_posting_for_profile(profile_uuid, groups, content_to_post, completed_count, total_groups)
+                    completed_count += len(groups)
+                except Exception as e:
+                    import traceback
+                    traceback.print_exc()
+                    self.signal.log_message.emit(f"Lỗi với profile {profile_name}: {e}", "error")
 
-                if not remote_port:
-                    match = re.search(r':(\d+)/', ws_url)
-                    if match:
-                        remote_port = int(match.group(1))
+            self.signal.post_complete.emit()
 
-                if not remote_port:
-                    self.signal.log_message.emit("Không lấy được CDP port", "error")
-                    release_window_slot(slot_id)
-                    self.signal.post_complete.emit()
-                    return
+        threading.Thread(target=execute_all_posting, daemon=True).start()
 
-                cdp_base = f"http://127.0.0.1:{remote_port}"
+    def _execute_posting_for_profile(self, profile_uuid: str, groups: List[Dict], content_to_post: str, completed_offset: int, total_groups: int):
+        """Thực hiện posting cho 1 profile"""
+        slot_id = acquire_window_slot()
+
+        try:
+            # Mở browser
+            self.signal.log_message.emit(f"Mở browser...", "info")
+            result = api.open_browser(profile_uuid)
+
+            status = result.get('status') or result.get('type')
+            if status not in ['successfully', 'success', True]:
+                if 'already' not in str(result).lower():
+                    raise Exception(f"Không mở được browser: {result}")
+
+            # Lấy CDP port
+            data = result.get('data', {})
+            remote_port = data.get('remote_port')
+            ws_url = data.get('web_socket', '')
+
+            if not remote_port:
+                match = re.search(r':(\d+)/', ws_url)
+                if match:
+                    remote_port = int(match.group(1))
+
+            if not remote_port:
+                raise Exception("Không lấy được CDP port")
+
+            cdp_base = f"http://127.0.0.1:{remote_port}"
+            time.sleep(2)
+
+            # Lấy WebSocket
+            resp = requests.get(f"{cdp_base}/json", timeout=10)
+            tabs = resp.json()
+
+            page_ws = None
+            for tab in tabs:
+                if tab.get('type') == 'page':
+                    page_ws = tab.get('webSocketDebuggerUrl')
+                    break
+
+            if not page_ws:
+                raise Exception("Không tìm thấy WebSocket")
+
+            ws = websocket.create_connection(page_ws, timeout=30, suppress_origin=True)
+            msg_id = [10]
+
+            def send_cdp(method, params=None):
+                msg_id[0] += 1
+                msg = {"id": msg_id[0], "method": method}
+                if params:
+                    msg["params"] = params
+                ws.send(json_module.dumps(msg))
+                return json_module.loads(ws.recv())
+
+            total = len(groups)
+
+            for i, group in enumerate(groups):
+                if self._stop_requested:
+                    break
+
+                group_name = group.get('group_name') or group.get('name', 'Unknown')
+                group_id = group.get('group_id', '')
+                self.signal.log_message.emit(f"[{completed_offset + i + 1}/{total_groups}] Đăng vào: {group_name[:30]}", "info")
+
+                # Navigate đến nhóm
+                group_url = f"https://www.facebook.com/groups/{group_id}"
+                send_cdp("Page.navigate", {"url": group_url})
+                time.sleep(5)
+
+                # Lấy nội dung random hoặc cố định
+                if self.random_content_cb.isChecked() and self.contents:
+                    content = random.choice(self.contents)
+                    post_text = content.get('content', content_to_post)
+                else:
+                    post_text = content_to_post
+
+                # Click vào ô viết bài
+                click_script = """
+                (function() {
+                    var selectors = [
+                        '[aria-label*="Viết"]',
+                        '[aria-label*="Write"]',
+                        '[data-testid="Composer"]',
+                        '[role="button"][tabindex="0"]'
+                    ];
+                    for (var s of selectors) {
+                        var el = document.querySelector(s);
+                        if (el && el.offsetParent !== null) {
+                            el.click();
+                            return 'clicked';
+                        }
+                    }
+                    return 'not_found';
+                })()
+                """
+                send_cdp("Runtime.evaluate", {"expression": click_script})
                 time.sleep(2)
 
-                # Lấy WebSocket
-                try:
-                    resp = requests.get(f"{cdp_base}/json", timeout=10)
-                    tabs = resp.json()
-                except Exception as e:
-                    self.signal.log_message.emit(f"Lỗi CDP: {e}", "error")
-                    release_window_slot(slot_id)
-                    self.signal.post_complete.emit()
-                    return
+                # Nhập nội dung
+                type_script = f"""
+                (function() {{
+                    var editor = document.querySelector('[contenteditable="true"][role="textbox"]');
+                    if (editor) {{
+                        editor.focus();
+                        document.execCommand('insertText', false, {json_module.dumps(post_text)});
+                        return 'typed';
+                    }}
+                    return 'no_editor';
+                }})()
+                """
+                send_cdp("Runtime.evaluate", {"expression": type_script})
+                time.sleep(1)
 
-                page_ws = None
-                for tab in tabs:
-                    if tab.get('type') == 'page':
-                        page_ws = tab.get('webSocketDebuggerUrl')
-                        break
-
-                if not page_ws:
-                    release_window_slot(slot_id)
-                    self.signal.post_complete.emit()
-                    return
-
-                try:
-                    ws = websocket.create_connection(page_ws, timeout=30, suppress_origin=True)
-                except:
-                    release_window_slot(slot_id)
-                    self.signal.post_complete.emit()
-                    return
-
-                total = len(selected_groups)
-                msg_id = [10]
-
-                def send_cdp(method, params=None):
-                    msg_id[0] += 1
-                    msg = {"id": msg_id[0], "method": method}
-                    if params:
-                        msg["params"] = params
-                    ws.send(json_module.dumps(msg))
-                    return json_module.loads(ws.recv())
-
-                for i, group in enumerate(selected_groups):
-                    if self._stop_requested:
-                        break
-
-                    group_name = group.get('name', 'Unknown')
-                    group_id = group.get('group_id', '')
-                    self.signal.log_message.emit(f"[{i+1}/{total}] Đăng vào: {group_name}", "info")
-
-                    # Navigate đến nhóm
-                    group_url = f"https://www.facebook.com/groups/{group_id}"
-                    send_cdp("Page.navigate", {"url": group_url})
-                    time.sleep(5)
-
-                    # Lấy nội dung random hoặc cố định
-                    if self.random_content_cb.isChecked() and self.contents:
-                        content = random.choice(self.contents)
-                        post_text = content.get('content', content_to_post)
-                    else:
-                        post_text = content_to_post
-
-                    # Click vào ô viết bài - thử nhiều selector
-                    click_script = """
-                    (function() {
-                        // Tìm ô "Viết gì đó..." hoặc "Write something..."
-                        var selectors = [
-                            '[aria-label*="Viết"]',
-                            '[aria-label*="Write"]',
-                            '[data-testid="Composer"]',
-                            '[role="button"][tabindex="0"]'
-                        ];
-                        for (var s of selectors) {
-                            var el = document.querySelector(s);
-                            if (el && el.offsetParent !== null) {
-                                el.click();
-                                return 'clicked';
-                            }
+                # Click nút Đăng
+                post_script = """
+                (function() {
+                    var btns = document.querySelectorAll('[aria-label*="Đăng"], [aria-label*="Post"], button');
+                    for (var btn of btns) {
+                        var text = btn.textContent || btn.getAttribute('aria-label') || '';
+                        if (text.includes('Đăng') || text.includes('Post')) {
+                            btn.click();
+                            return 'posted';
                         }
-                        return 'not_found';
-                    })()
-                    """
-                    send_cdp("Runtime.evaluate", {"expression": click_script})
-                    time.sleep(2)
+                    }
+                    return 'no_button';
+                })()
+                """
+                send_cdp("Runtime.evaluate", {"expression": post_script})
+                self.signal.log_message.emit(f"✓ Đã đăng vào {group_name[:25]}", "success")
 
-                    # Nhập nội dung
-                    type_script = f"""
-                    (function() {{
-                        var editor = document.querySelector('[contenteditable="true"][role="textbox"]');
-                        if (editor) {{
-                            editor.focus();
-                            document.execCommand('insertText', false, {json_module.dumps(post_text)});
-                            return 'typed';
-                        }}
-                        return 'no_editor';
-                    }})()
-                    """
-                    send_cdp("Runtime.evaluate", {"expression": type_script})
-                    time.sleep(1)
+                # Lưu lịch sử
+                save_post_history({
+                    'profile_uuid': profile_uuid,
+                    'group_id': group_id,
+                    'group_name': group_name,
+                    'content': post_text[:200],
+                    'status': 'success',
+                    'posted_at': time.strftime('%Y-%m-%d %H:%M:%S')
+                })
 
-                    # Click nút Đăng
-                    post_script = """
-                    (function() {
-                        var btns = document.querySelectorAll('[aria-label*="Đăng"], [aria-label*="Post"], button');
-                        for (var btn of btns) {
-                            var text = btn.textContent || btn.getAttribute('aria-label') || '';
-                            if (text.includes('Đăng') || text.includes('Post')) {
-                                btn.click();
-                                return 'posted';
-                            }
-                        }
-                        return 'no_button';
-                    })()
-                    """
-                    result = send_cdp("Runtime.evaluate", {"expression": post_script})
-                    self.signal.log_message.emit(f"✓ Đã đăng vào {group_name}", "success")
+                self.signal.post_progress.emit(completed_offset + i + 1, total_groups)
 
-                    # Lưu lịch sử
-                    save_post_history({
-                        'profile_uuid': profile_uuid,
-                        'group_id': group_id,
-                        'group_name': group_name,
-                        'content': post_text[:200],
-                        'status': 'success',
-                        'posted_at': time.strftime('%Y-%m-%d %H:%M:%S')
-                    })
+                # Delay giữa các nhóm
+                if i < total - 1:
+                    delay = random.randint(5, 15) if self.random_delay_cb.isChecked() else self.delay_spin.value()
+                    self.signal.log_message.emit(f"Đợi {delay}s...", "info")
+                    time.sleep(delay)
 
-                    self.signal.post_progress.emit(i + 1, total)
+            ws.close()
 
-                    # Delay giữa các nhóm
-                    if i < total - 1:
-                        delay = random.randint(5, 15) if self.random_delay_cb.isChecked() else self.delay_spin.value()
-                        self.signal.log_message.emit(f"Đợi {delay}s...", "info")
-                        time.sleep(delay)
-
-                ws.close()
-                release_window_slot(slot_id)
-                self.signal.post_complete.emit()
-
-            except Exception as e:
-                import traceback
-                traceback.print_exc()
-                self.signal.log_message.emit(f"Lỗi: {str(e)}", "error")
-                self.signal.post_complete.emit()
-
-        threading.Thread(target=post, daemon=True).start()
+        finally:
+            release_window_slot(slot_id)
 
     def _get_content_to_post(self):
         """Lấy nội dung để đăng từ category/content đã chọn"""
