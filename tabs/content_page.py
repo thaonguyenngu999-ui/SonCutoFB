@@ -315,7 +315,7 @@ class ContentPage(QWidget):
         btn_row = QHBoxLayout()
         btn_row.setSpacing(8)
 
-        self.btn_new = CyberButton("TẠO MỚI", "cyan", "➕")
+        self.btn_new = CyberButton("TẠO MỚI", "primary", "➕")
         self.btn_new.clicked.connect(self._add_content)
         btn_row.addWidget(self.btn_new)
 
