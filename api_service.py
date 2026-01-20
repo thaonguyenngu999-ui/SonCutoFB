@@ -17,8 +17,13 @@ class HidemiumAPI:
         }
     
     def _request(self, method: str, endpoint: str, params: Dict = None, data: Dict = None) -> Dict:
-        """Thực hiện request đến API"""
+        """Thực hiện request đến API với token"""
         url = f"{self.base_url}{endpoint}"
+        # Thêm api_token vào params
+        if params is None:
+            params = {}
+        params["api_token"] = self.token
+
         try:
             response = requests.request(
                 method=method,
@@ -35,8 +40,13 @@ class HidemiumAPI:
             return {"type": "error", "title": str(e), "content": None}
     
     def _get(self, endpoint: str, params: Dict = None) -> Dict:
-        """GET request đơn giản (không cần auth)"""
+        """GET request với token"""
         url = f"{self.base_url}{endpoint}"
+        # Thêm api_token vào params
+        if params is None:
+            params = {}
+        params["api_token"] = self.token
+
         try:
             response = requests.get(url, params=params, timeout=30)
             return response.json()
@@ -50,7 +60,11 @@ class HidemiumAPI:
     def check_connection(self) -> bool:
         """Kiểm tra kết nối Hidemium"""
         try:
-            response = requests.get(f"{self.base_url}/v2/tag", timeout=5)
+            response = requests.get(
+                f"{self.base_url}/v2/tag",
+                params={"api_token": self.token},
+                timeout=5
+            )
             return response.status_code == 200
         except requests.exceptions.RequestException:
             # Handle all request-related errors (connection, timeout, etc.)
