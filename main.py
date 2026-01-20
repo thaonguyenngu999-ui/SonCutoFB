@@ -131,6 +131,11 @@ class Sidebar(QWidget):
             self.conn_text.setStyleSheet(f"color: {COLORS['neon_coral']}; font-size: 10px;")
 
 
+class DataLoadedSignal(QObject):
+    """Signal để truyền data từ thread về main thread"""
+    data_ready = Signal(dict)
+
+
 class ProfilesPage(QWidget):
     """Profiles - WITH REAL HIDEMIUM API 🐱"""
     
@@ -142,6 +147,10 @@ class ProfilesPage(QWidget):
         self.folder_map = {}
         self.running_uuids = set()
         self.toggle_buttons = {}
+        
+        # Signal để nhận data từ thread
+        self.data_signal = DataLoadedSignal()
+        self.data_signal.data_ready.connect(self._on_data_loaded)
         
         self._setup_ui()
         
@@ -272,44 +281,60 @@ class ProfilesPage(QWidget):
         table_layout.addWidget(self.table)
         layout.addWidget(table_card, 1)
     
+    def _on_data_loaded(self, result):
+        """Slot nhận data từ thread - chạy trên main thread"""
+        print(f"[DEBUG] _on_data_loaded called with {len(result.get('profiles', []))} profiles")
+        if "error" in result:
+            self.log(f"Error: {result['error']}", "error")
+            return
+        
+        self.folders = result.get("folders", [])
+        self.folder_map = {f.get('id'): f.get('name', 'Unknown') for f in self.folders}
+        print(f"[DEBUG] Folder map: {self.folder_map}")
+        
+        self.folder_combo.clear()
+        self.folder_combo.addItem("📁 Tất cả")
+        for folder in self.folders:
+            self.folder_combo.addItem(f"📁 {folder.get('name', 'Unknown')}")
+        
+        self.profiles = result.get("profiles", [])
+        self.running_uuids = set(result.get("running", []))
+        print(f"[DEBUG] self.profiles has {len(self.profiles)} items")
+        
+        sync_profiles(self.profiles)
+        self._update_table()
+        self._update_stats()
+        
+        self.log(f"Loaded {len(self.profiles)} profiles, {len(self.folders)} folders", "success")
+    
     def _load_data(self):
         """Load profiles và folders từ Hidemium"""
         self.log("Loading from Hidemium...", "info")
         
         def fetch():
             try:
+                print("[DEBUG] Fetching folders...")
                 folders = api.get_folders(limit=100)
+                print(f"[DEBUG] Got {len(folders)} folders")
+                
+                print("[DEBUG] Fetching profiles...")
                 profiles = api.get_profiles(limit=500)
+                print(f"[DEBUG] Got {len(profiles)} profiles")
+                
                 running = api.get_running_profiles()
+                print(f"[DEBUG] Got {len(running)} running")
                 return {"folders": folders, "profiles": profiles, "running": running}
             except Exception as e:
+                print(f"[DEBUG] Fetch error: {str(e)}")
+                import traceback
+                traceback.print_exc()
                 return {"error": str(e)}
-        
-        def on_complete(result):
-            if "error" in result:
-                self.log(f"Error: {result['error']}", "error")
-                return
-            
-            self.folders = result.get("folders", [])
-            self.folder_map = {f.get('id'): f.get('name', 'Unknown') for f in self.folders}
-            
-            self.folder_combo.clear()
-            self.folder_combo.addItem("📁 Tất cả")
-            for folder in self.folders:
-                self.folder_combo.addItem(f"📁 {folder.get('name', 'Unknown')}")
-            
-            self.profiles = result.get("profiles", [])
-            self.running_uuids = set(result.get("running", []))
-            
-            sync_profiles(self.profiles)
-            self._update_table()
-            self._update_stats()
-            
-            self.log(f"Loaded {len(self.profiles)} profiles", "success")
         
         def run_thread():
             result = fetch()
-            QTimer.singleShot(0, lambda: on_complete(result))
+            print("[DEBUG] Emitting signal...")
+            self.data_signal.data_ready.emit(result)
+            print("[DEBUG] Signal emitted")
         
         threading.Thread(target=run_thread, daemon=True).start()
     
