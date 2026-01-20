@@ -1442,6 +1442,122 @@ class GroupsPage(QWidget):
 
         threading.Thread(target=execute_all_posting, daemon=True).start()
 
+    def _type_like_human(self, ws, text: str, msg_id: list) -> bool:
+        """Gõ từng ký tự như người thật với typo và pause. Returns True nếu thành công."""
+        # Các ký tự hay bị gõ nhầm (adjacent keys)
+        typo_map = {
+            'a': ['s', 'q', 'z'], 'b': ['v', 'n', 'g'], 'c': ['x', 'v', 'd'],
+            'd': ['s', 'f', 'e'], 'e': ['w', 'r', 'd'], 'f': ['d', 'g', 'r'],
+            'g': ['f', 'h', 't'], 'h': ['g', 'j', 'y'], 'i': ['u', 'o', 'k'],
+            'j': ['h', 'k', 'u'], 'k': ['j', 'l', 'i'], 'l': ['k', 'o', 'p'],
+            'm': ['n', 'k'], 'n': ['b', 'm', 'h'], 'o': ['i', 'p', 'l'],
+            'p': ['o', 'l'], 'q': ['w', 'a'], 'r': ['e', 't', 'f'],
+            's': ['a', 'd', 'w'], 't': ['r', 'y', 'g'], 'u': ['y', 'i', 'j'],
+            'v': ['c', 'b', 'f'], 'w': ['q', 'e', 's'], 'x': ['z', 'c', 's'],
+            'y': ['t', 'u', 'h'], 'z': ['x', 'a']
+        }
+
+        def send_cdp(method, params=None):
+            msg_id[0] += 1
+            msg = {"id": msg_id[0], "method": method}
+            if params:
+                msg["params"] = params
+            try:
+                ws.send(json_module.dumps(msg))
+                return json_module.loads(ws.recv())
+            except:
+                return {"ws_closed": True}
+
+        # Chia text thành các đoạn (theo dòng hoặc câu)
+        paragraphs = text.split('\n')
+
+        for p_idx, paragraph in enumerate(paragraphs):
+            if not paragraph.strip():
+                # Gõ newline
+                result = send_cdp("Input.insertText", {"text": "\n"})
+                if result.get('ws_closed'):
+                    return False
+                time.sleep(random.uniform(0.3, 0.8))
+                continue
+
+            # Chia paragraph thành các câu
+            sentences = paragraph.replace('. ', '.|').replace('! ', '!|').replace('? ', '?|').split('|')
+
+            for s_idx, sentence in enumerate(sentences):
+                for i, char in enumerate(sentence):
+                    # Random typo (3% chance cho chữ thường)
+                    if char.lower() in typo_map and random.random() < 0.03:
+                        # Gõ sai
+                        wrong_char = random.choice(typo_map[char.lower()])
+                        result = send_cdp("Input.insertText", {"text": wrong_char})
+                        if result.get('ws_closed'):
+                            return False
+                        time.sleep(random.uniform(0.05, 0.15))
+
+                        # Nhận ra sai, dừng lại
+                        time.sleep(random.uniform(0.2, 0.5))
+
+                        # Xóa (Backspace)
+                        result = send_cdp("Input.dispatchKeyEvent", {
+                            "type": "keyDown",
+                            "key": "Backspace",
+                            "code": "Backspace"
+                        })
+                        if result.get('ws_closed'):
+                            return False
+                        result = send_cdp("Input.dispatchKeyEvent", {
+                            "type": "keyUp",
+                            "key": "Backspace",
+                            "code": "Backspace"
+                        })
+                        if result.get('ws_closed'):
+                            return False
+                        time.sleep(random.uniform(0.1, 0.2))
+
+                    # Gõ ký tự đúng
+                    result = send_cdp("Input.insertText", {"text": char})
+                    if result.get('ws_closed'):
+                        return False
+
+                    # Delay khác nhau tùy ký tự
+                    if char in ' .,!?':
+                        # Sau dấu câu chậm hơn
+                        time.sleep(random.uniform(0.08, 0.2))
+                    elif char.isupper():
+                        # Chữ hoa chậm hơn (phải giữ Shift)
+                        time.sleep(random.uniform(0.06, 0.15))
+                    else:
+                        # Chữ thường nhanh hơn
+                        time.sleep(random.uniform(0.03, 0.1))
+
+                # Pause giữa các câu
+                if s_idx < len(sentences) - 1:
+                    time.sleep(random.uniform(0.3, 0.8))
+
+            # Gõ newline giữa các paragraph
+            if p_idx < len(paragraphs) - 1:
+                result = send_cdp("Input.insertText", {"text": "\n"})
+                if result.get('ws_closed'):
+                    return False
+                # Pause lâu hơn giữa các đoạn
+                time.sleep(random.uniform(0.5, 1.2))
+
+        return True
+
+    def _scroll_page(self, ws, direction: str, amount: int, msg_id: list):
+        """Cuộn trang như người thật"""
+        scroll_script = f"window.scrollBy(0, {amount if direction == 'down' else -amount});"
+        msg_id[0] += 1
+        ws.send(json_module.dumps({
+            "id": msg_id[0],
+            "method": "Runtime.evaluate",
+            "params": {"expression": scroll_script}
+        }))
+        try:
+            ws.recv()
+        except:
+            pass
+
     def _execute_posting_for_profile(self, profile_uuid: str, groups: List[Dict], content_to_post: str, completed_offset: int, total_groups: int):
         """Thực hiện posting cho 1 profile"""
         slot_id = acquire_window_slot()
@@ -1509,7 +1625,22 @@ class GroupsPage(QWidget):
                 # Navigate đến nhóm
                 group_url = f"https://www.facebook.com/groups/{group_id}"
                 send_cdp("Page.navigate", {"url": group_url})
-                time.sleep(5)
+                time.sleep(random.uniform(4, 6))
+
+                # Đợi page load
+                for _ in range(10):
+                    result = send_cdp("Runtime.evaluate", {"expression": "document.readyState"})
+                    if result.get('result', {}).get('result', {}).get('value') == 'complete':
+                        break
+                    time.sleep(1)
+                time.sleep(random.uniform(1, 2))
+
+                # Scroll xuống một chút như người thật đọc trang
+                if random.random() < 0.7:
+                    self._scroll_page(ws, "down", random.randint(100, 300), msg_id)
+                    time.sleep(random.uniform(0.5, 1.5))
+                    self._scroll_page(ws, "up", random.randint(50, 150), msg_id)
+                    time.sleep(random.uniform(0.3, 0.8))
 
                 # Lấy nội dung random hoặc cố định
                 if self.random_content_cb.isChecked() and self.contents:
@@ -1518,58 +1649,162 @@ class GroupsPage(QWidget):
                 else:
                     post_text = content_to_post
 
-                # Click vào ô viết bài
-                click_script = """
+                # Click vào ô "Bạn viết gì đi..." - PHÂN BIỆT COMPOSER TẠO BÀI vs Ô COMMENT
+                click_composer_script = '''
                 (function() {
-                    var selectors = [
-                        '[aria-label*="Viết"]',
-                        '[aria-label*="Write"]',
-                        '[data-testid="Composer"]',
-                        '[role="button"][tabindex="0"]'
-                    ];
-                    for (var s of selectors) {
-                        var el = document.querySelector(s);
-                        if (el && el.offsetParent !== null) {
-                            el.click();
-                            return 'clicked';
+                    const composerTexts = ['Bạn viết gì đi', 'Write something', 'bạn viết gì đi', 'write something'];
+
+                    function hasComposerText(text) {
+                        if (!text) return false;
+                        let lowerText = text.toLowerCase();
+                        for (let kw of composerTexts) {
+                            if (lowerText.includes(kw.toLowerCase())) return true;
+                        }
+                        return false;
+                    }
+
+                    function isInsideArticle(el) {
+                        let parent = el;
+                        while (parent) {
+                            if (parent.getAttribute && parent.getAttribute('role') === 'article') {
+                                return true;
+                            }
+                            parent = parent.parentElement;
+                        }
+                        return false;
+                    }
+
+                    // Cách 1: Tìm [role="button"][tabindex="0"] với text composer
+                    let btns = document.querySelectorAll('[role="button"][tabindex="0"]');
+                    for (let btn of btns) {
+                        let text = btn.innerText || '';
+                        if (hasComposerText(text) && !isInsideArticle(btn)) {
+                            let rect = btn.getBoundingClientRect();
+                            if (rect.top > 0 && rect.top < 700 && rect.width > 50) {
+                                btn.click();
+                                return {x: rect.left + rect.width/2, y: rect.top + rect.height/2, clicked: true};
+                            }
                         }
                     }
-                    return 'not_found';
-                })()
-                """
-                send_cdp("Runtime.evaluate", {"expression": click_script})
-                time.sleep(2)
 
-                # Nhập nội dung
-                type_script = f"""
-                (function() {{
-                    var editor = document.querySelector('[contenteditable="true"][role="textbox"]');
-                    if (editor) {{
-                        editor.focus();
-                        document.execCommand('insertText', false, {json_module.dumps(post_text)});
-                        return 'typed';
-                    }}
-                    return 'no_editor';
-                }})()
-                """
-                send_cdp("Runtime.evaluate", {"expression": type_script})
-                time.sleep(1)
+                    // Cách 2: Tìm tất cả [role="button"]
+                    let allBtns = document.querySelectorAll('[role="button"]');
+                    for (let btn of allBtns) {
+                        let text = btn.innerText || '';
+                        if (hasComposerText(text) && !isInsideArticle(btn)) {
+                            let rect = btn.getBoundingClientRect();
+                            if (rect.top > 0 && rect.top < 700) {
+                                btn.click();
+                                return {x: rect.left + rect.width/2, y: rect.top + rect.height/2, clicked: true};
+                            }
+                        }
+                    }
+
+                    // Cách 3: Tìm div[tabindex="0"]
+                    let divs = document.querySelectorAll('div[tabindex="0"]');
+                    for (let div of divs) {
+                        let text = div.innerText || '';
+                        if (hasComposerText(text) && !isInsideArticle(div)) {
+                            let rect = div.getBoundingClientRect();
+                            if (rect.top > 0 && rect.top < 700) {
+                                div.click();
+                                return {x: rect.left + rect.width/2, y: rect.top + rect.height/2, clicked: true};
+                            }
+                        }
+                    }
+
+                    // Cách 4: Tìm theo aria-label
+                    let labeled = document.querySelectorAll('[aria-label*="Create a post"], [aria-label*="Tạo bài viết"], [aria-label*="Viết bài"]');
+                    for (let el of labeled) {
+                        if (!isInsideArticle(el)) {
+                            let rect = el.getBoundingClientRect();
+                            if (rect.top > 0 && rect.top < 700) {
+                                el.click();
+                                return {x: rect.left + rect.width/2, y: rect.top + rect.height/2, clicked: true};
+                            }
+                        }
+                    }
+
+                    return {clicked: false};
+                })()
+                '''
+                result = send_cdp("Runtime.evaluate", {"expression": click_composer_script, "returnByValue": True})
+                time.sleep(random.uniform(2, 3))
+
+                # Đợi editor xuất hiện
+                for _ in range(5):
+                    check_result = send_cdp("Runtime.evaluate", {
+                        "expression": "document.querySelector('[contenteditable=\"true\"][role=\"textbox\"]') !== null",
+                        "returnByValue": True
+                    })
+                    if check_result.get('result', {}).get('result', {}).get('value'):
+                        break
+                    time.sleep(1)
+
+                # Focus vào editor
+                send_cdp("Runtime.evaluate", {
+                    "expression": """
+                    (function() {
+                        var editor = document.querySelector('[contenteditable="true"][role="textbox"]');
+                        if (editor) {
+                            editor.focus();
+                            editor.click();
+                            return true;
+                        }
+                        return false;
+                    })()
+                    """
+                })
+                time.sleep(0.5)
+
+                # Gõ nội dung như người thật
+                use_human_typing = random.random() < 0.6  # 60% dùng human typing
+                if use_human_typing and len(post_text) < 500:
+                    self.signal.log_message.emit("Đang gõ nội dung...", "info")
+                    self._type_like_human(ws, post_text, msg_id)
+                else:
+                    # Dùng insertText nhanh hơn cho text dài
+                    type_script = f"""
+                    (function() {{
+                        var editor = document.querySelector('[contenteditable="true"][role="textbox"]');
+                        if (editor) {{
+                            editor.focus();
+                            document.execCommand('insertText', false, {json_module.dumps(post_text)});
+                            return 'typed';
+                        }}
+                        return 'no_editor';
+                    }})()
+                    """
+                    send_cdp("Runtime.evaluate", {"expression": type_script})
+                time.sleep(random.uniform(1, 2))
 
                 # Click nút Đăng
                 post_script = """
                 (function() {
-                    var btns = document.querySelectorAll('[aria-label*="Đăng"], [aria-label*="Post"], button');
+                    // Tìm nút Đăng trong dialog/popup
+                    var btns = document.querySelectorAll('[aria-label*="Đăng"], [aria-label*="Post"], button, [role="button"]');
                     for (var btn of btns) {
                         var text = btn.textContent || btn.getAttribute('aria-label') || '';
-                        if (text.includes('Đăng') || text.includes('Post')) {
+                        var rect = btn.getBoundingClientRect();
+                        // Nút Đăng thường ở góc dưới/phải của popup
+                        if ((text.trim() === 'Đăng' || text.trim() === 'Post') && rect.width > 30) {
                             btn.click();
                             return 'posted';
+                        }
+                    }
+                    // Fallback: tìm nút có text chứa Đăng/Post
+                    for (var btn of btns) {
+                        var text = btn.textContent || '';
+                        if (text.includes('Đăng') || text.includes('Post')) {
+                            btn.click();
+                            return 'posted_fallback';
                         }
                     }
                     return 'no_button';
                 })()
                 """
                 send_cdp("Runtime.evaluate", {"expression": post_script})
+                time.sleep(random.uniform(2, 4))  # Đợi đăng xong
                 self.signal.log_message.emit(f"✓ Đã đăng vào {group_name[:25]}", "success")
 
                 # Lưu lịch sử
@@ -1827,63 +2062,178 @@ class GroupsPage(QWidget):
 
                     self.signal.log_message.emit(f"[{i+1}/{total}] Comment: {group_name}", "info")
 
-                    if post_url:
-                        # Navigate đến bài post
-                        send_cdp("Page.navigate", {"url": post_url})
-                        time.sleep(5)
+                    if post_url and 'facebook.com' in post_url:
+                        # TẠO TAB MỚI để tránh Leave site dialog
+                        try:
+                            result = send_cdp("Target.createTarget", {"url": post_url})
+                            target_id = result.get('result', {}).get('targetId')
 
-                        # Click vào ô bình luận
-                        click_comment_script = """
-                        (function() {
-                            var selectors = [
-                                '[aria-label*="Viết bình luận"]',
-                                '[aria-label*="Write a comment"]',
-                                '[data-testid="UFI2CommentInput"]',
-                                '[placeholder*="Viết"]'
-                            ];
-                            for (var s of selectors) {
-                                var el = document.querySelector(s);
-                                if (el) {
-                                    el.click();
-                                    return 'clicked';
+                            if not target_id:
+                                self.signal.log_message.emit(f"Không tạo được tab mới", "warning")
+                                continue
+
+                            time.sleep(random.uniform(3, 5))
+
+                            # Lấy WebSocket của tab mới
+                            new_ws_url = None
+                            try:
+                                resp = requests.get(f"{cdp_base}/json", timeout=10)
+                                pages = resp.json()
+                                for p in pages:
+                                    if p.get('id') == target_id:
+                                        new_ws_url = p.get('webSocketDebuggerUrl')
+                                        break
+                            except:
+                                pass
+
+                            if not new_ws_url:
+                                send_cdp("Target.closeTarget", {"targetId": target_id})
+                                continue
+
+                            # Kết nối WebSocket tab mới
+                            new_ws = None
+                            try:
+                                new_ws = websocket.create_connection(new_ws_url, timeout=30, suppress_origin=True)
+                            except:
+                                try:
+                                    new_ws = websocket.create_connection(new_ws_url, timeout=30)
+                                except:
+                                    send_cdp("Target.closeTarget", {"targetId": target_id})
+                                    continue
+
+                            new_msg_id = [10]
+
+                            def send_new(method, params=None):
+                                new_msg_id[0] += 1
+                                msg = {"id": new_msg_id[0], "method": method, "params": params or {}}
+                                new_ws.send(json_module.dumps(msg))
+                                try:
+                                    new_ws.settimeout(30)
+                                    resp = new_ws.recv()
+                                    return json_module.loads(resp)
+                                except:
+                                    return {}
+
+                            def eval_new(expr):
+                                result = send_new("Runtime.evaluate", {
+                                    "expression": expr,
+                                    "returnByValue": True,
+                                    "awaitPromise": True
+                                })
+                                return result.get('result', {}).get('result', {}).get('value')
+
+                            # Đợi page load
+                            for _ in range(10):
+                                ready = eval_new("document.readyState")
+                                if ready == 'complete':
+                                    break
+                                time.sleep(1)
+
+                            time.sleep(random.uniform(1, 2))
+
+                            # Scroll xuống một chút để thấy comment box
+                            eval_new("window.scrollBy(0, 300);")
+                            time.sleep(random.uniform(0.5, 1))
+
+                            # Tìm và click vào ô comment
+                            click_comment_js = '''
+                            (function() {
+                                // Tìm ô "Viết bình luận..." hoặc "Write a comment..."
+                                let placeholders = document.querySelectorAll('[contenteditable="true"]');
+                                for (let el of placeholders) {
+                                    let placeholder = el.getAttribute('aria-placeholder') || el.getAttribute('placeholder') || '';
+                                    if (placeholder.includes('bình luận') || placeholder.includes('comment') ||
+                                        placeholder.includes('Viết') || placeholder.includes('Write')) {
+                                        el.focus();
+                                        el.click();
+                                        return true;
+                                    }
                                 }
-                            }
-                            return 'not_found';
-                        })()
-                        """
-                        send_cdp("Runtime.evaluate", {"expression": click_comment_script})
-                        time.sleep(1)
 
-                        # Nhập bình luận
-                        type_comment_script = f"""
-                        (function() {{
-                            var editor = document.querySelector('[contenteditable="true"]');
-                            if (editor) {{
-                                editor.focus();
-                                document.execCommand('insertText', false, {json_module.dumps(comment_text)});
-                                return 'typed';
-                            }}
-                            return 'no_editor';
-                        }})()
-                        """
-                        send_cdp("Runtime.evaluate", {"expression": type_comment_script})
-                        time.sleep(1)
+                                // Fallback: tìm theo aria-label
+                                let commentBox = document.querySelector('[aria-label*="bình luận"]');
+                                if (!commentBox) commentBox = document.querySelector('[aria-label*="comment"]');
+                                if (!commentBox) commentBox = document.querySelector('[aria-label*="Viết"]');
+                                if (commentBox) {
+                                    commentBox.focus();
+                                    commentBox.click();
+                                    return true;
+                                }
 
-                        # Nhấn Enter để gửi
-                        send_cdp("Input.dispatchKeyEvent", {
-                            "type": "keyDown",
-                            "key": "Enter",
-                            "code": "Enter",
-                            "windowsVirtualKeyCode": 13
-                        })
-                        send_cdp("Input.dispatchKeyEvent", {
-                            "type": "keyUp",
-                            "key": "Enter",
-                            "code": "Enter",
-                            "windowsVirtualKeyCode": 13
-                        })
+                                // Fallback 2: click vào text "Viết bình luận"
+                                let spans = document.querySelectorAll('span');
+                                for (let span of spans) {
+                                    if (span.innerText && (span.innerText.includes('Viết bình luận') ||
+                                        span.innerText.includes('Write a comment'))) {
+                                        span.click();
+                                        return true;
+                                    }
+                                }
+                                return false;
+                            })()
+                            '''
+                            clicked = eval_new(click_comment_js)
+                            if not clicked:
+                                self.signal.log_message.emit(f"Không tìm thấy ô comment", "warning")
+                                try:
+                                    new_ws.close()
+                                except:
+                                    pass
+                                send_cdp("Target.closeTarget", {"targetId": target_id})
+                                continue
 
-                        self.signal.log_message.emit(f"✓ Đã comment: {comment_text[:30]}...", "success")
+                            time.sleep(random.uniform(1, 2))
+
+                            # Gõ comment từng ký tự như người thật
+                            for char in comment_text:
+                                # Random typo (3% chance)
+                                if random.random() < 0.03:
+                                    wrong_char = random.choice('abcdefghijklmnopqrstuvwxyz')
+                                    send_new("Input.insertText", {"text": wrong_char})
+                                    time.sleep(random.uniform(0.05, 0.15))
+                                    send_new("Input.dispatchKeyEvent", {
+                                        "type": "keyDown",
+                                        "key": "Backspace",
+                                        "code": "Backspace"
+                                    })
+                                    send_new("Input.dispatchKeyEvent", {
+                                        "type": "keyUp",
+                                        "key": "Backspace",
+                                        "code": "Backspace"
+                                    })
+                                    time.sleep(random.uniform(0.1, 0.2))
+
+                                send_new("Input.insertText", {"text": char})
+                                time.sleep(random.uniform(0.03, 0.12))
+
+                            time.sleep(random.uniform(0.5, 1))
+
+                            # Nhấn Enter để gửi comment
+                            send_new("Input.dispatchKeyEvent", {
+                                "type": "keyDown",
+                                "key": "Enter",
+                                "code": "Enter"
+                            })
+                            time.sleep(0.1)
+                            send_new("Input.dispatchKeyEvent", {
+                                "type": "keyUp",
+                                "key": "Enter",
+                                "code": "Enter"
+                            })
+
+                            time.sleep(random.uniform(2, 3))
+
+                            # Đóng tab mới
+                            try:
+                                new_ws.close()
+                            except:
+                                pass
+                            send_cdp("Target.closeTarget", {"targetId": target_id})
+
+                            self.signal.log_message.emit(f"✓ Đã comment: {comment_text[:30]}...", "success")
+
+                        except Exception as e:
+                            self.signal.log_message.emit(f"Lỗi comment: {str(e)[:30]}", "error")
                     else:
                         self.signal.log_message.emit(f"Bỏ qua: không có URL", "warning")
 
