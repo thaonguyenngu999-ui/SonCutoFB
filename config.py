@@ -5,7 +5,7 @@ FB Manager Pro - Configuration
 
 # ========== HIDEMIUM API CONFIG ==========
 HIDEMIUM_BASE_URL = "http://127.0.0.1:2222"
-HIDEMIUM_TOKEN = "Cu6tDTR2N1HhTxlMyrQubY2ad56eQzWOjVrrb"
+HIDEMIUM_TOKEN = "MkkmO8VZiI22dcJIS4qDiYwyNH6JIGC8G9L"
 
 # ========== APP INFO ==========
 APP_NAME = "SonCuto FB Manager Pro"
