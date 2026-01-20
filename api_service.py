@@ -11,14 +11,17 @@ class HidemiumAPI:
     def __init__(self, base_url: str = HIDEMIUM_BASE_URL, token: str = HIDEMIUM_TOKEN):
         self.base_url = base_url
         self.token = token
+        # Headers với Authorization Bearer token
         self.headers = {
             "Content-Type": "application/json",
-            "Accept": "application/json, text/plain, */*"
+            "Accept": "application/json, text/plain, */*",
+            "Authorization": f"Bearer {token}"
         }
-    
+
     def _request(self, method: str, endpoint: str, params: Dict = None, data: Dict = None) -> Dict:
-        """Thực hiện request đến API"""
+        """Thực hiện request đến API với Bearer token"""
         url = f"{self.base_url}{endpoint}"
+
         try:
             response = requests.request(
                 method=method,
@@ -33,24 +36,29 @@ class HidemiumAPI:
             return {"type": "error", "title": "Không thể kết nối đến Hidemium", "content": None}
         except Exception as e:
             return {"type": "error", "title": str(e), "content": None}
-    
+
     def _get(self, endpoint: str, params: Dict = None) -> Dict:
-        """GET request đơn giản (không cần auth)"""
+        """GET request với Bearer token"""
         url = f"{self.base_url}{endpoint}"
+
         try:
-            response = requests.get(url, params=params, timeout=30)
+            response = requests.get(url, headers=self.headers, params=params, timeout=30)
             return response.json()
         except requests.exceptions.ConnectionError:
             return {"type": "error", "title": "Không thể kết nối đến Hidemium", "content": None}
         except Exception as e:
             return {"type": "error", "title": str(e), "content": None}
-    
+
     # ============ CONNECTION CHECK ============
-    
+
     def check_connection(self) -> bool:
-        """Kiểm tra kết nối Hidemium"""
+        """Kiểm tra kết nối Hidemium với Bearer token"""
         try:
-            response = requests.get(f"{self.base_url}/v2/tag", timeout=5)
+            response = requests.get(
+                f"{self.base_url}/v2/tag",
+                headers=self.headers,
+                timeout=5
+            )
             return response.status_code == 200
         except requests.exceptions.RequestException:
             # Handle all request-related errors (connection, timeout, etc.)
