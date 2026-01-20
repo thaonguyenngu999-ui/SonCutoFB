@@ -59,16 +59,14 @@ class CyberButton(QPushButton):
                 padding: 4px 14px;
                 font-weight: bold;
                 font-size: 11px;
-                text-shadow: 0 0 8px {self.color1};
             }}
             QPushButton:hover {{
-                background: qlineargradient(x1:0, x2:1, stop:0 {self.color1}, stop:1 {self.color2});
+                background: {self.color1};
                 border-color: {self.color1};
                 color: {hover_text};
-                text-shadow: none;
             }}
             QPushButton:pressed {{
-                background: {self.color1};
+                background: {self.color2};
                 color: {hover_text};
             }}
         """)
