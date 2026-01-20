@@ -21,6 +21,28 @@ from db import (
     delete_page, delete_pages_bulk, sync_pages, clear_pages, get_pages_count
 )
 
+# Import automation modules
+import requests
+import websocket
+import json as json_module
+import re
+import time
+
+try:
+    from automation.window_manager import acquire_window_slot, release_window_slot, get_window_bounds
+    WINDOW_MANAGER_AVAILABLE = True
+except ImportError:
+    WINDOW_MANAGER_AVAILABLE = False
+    def acquire_window_slot(): return 0
+    def release_window_slot(slot_id): pass
+    def get_window_bounds(slot_id): return (0, 0, 800, 600)
+
+try:
+    from bs4 import BeautifulSoup
+    BS4_AVAILABLE = True
+except ImportError:
+    BS4_AVAILABLE = False
+
 
 class PagesSignal(QObject):
     """Signal để thread-safe UI update"""
@@ -440,9 +462,13 @@ class PagesPage(QWidget):
         self.stat_profiles.set_value(str(len(self.profiles)))
 
     def _scan_pages(self):
-        """Scan pages tu profiles"""
+        """Scan pages từ profiles - MỞ BROWSER VÀ QUÉT THẬT"""
         if self._is_scanning:
             QMessageBox.warning(self, "Thông báo", "Đang scan, vui lòng đợi...")
+            return
+
+        if not BS4_AVAILABLE:
+            QMessageBox.warning(self, "Lỗi", "Cần cài BeautifulSoup4: pip install beautifulsoup4")
             return
 
         # Get selected profile or all profiles
@@ -453,12 +479,12 @@ class PagesPage(QWidget):
             profiles_to_scan = [self.profiles[profile_idx - 1]]
 
         if not profiles_to_scan:
-            QMessageBox.warning(self, "Loi", "Không có profile nào để scan!")
+            QMessageBox.warning(self, "Lỗi", "Không có profile nào để scan!")
             return
 
         reply = QMessageBox.question(
             self, "Xác nhận",
-            f"Scan pages tu {len(profiles_to_scan)} profiles?\n\nLưu ý: Tính năng này cần mở browser và đăng nhập Facebook.",
+            f"Scan pages từ {len(profiles_to_scan)} profiles?\n\nSẽ mở browser và quét danh sách Fanpages.",
             QMessageBox.Yes | QMessageBox.No
         )
 
@@ -472,36 +498,161 @@ class PagesPage(QWidget):
         self.log(f"Bắt đầu scan {len(profiles_to_scan)} profiles...", "info")
 
         def do_scan():
-            total_pages = 0
+            total_pages_found = 0
+
             for i, profile in enumerate(profiles_to_scan):
                 uuid = profile.get('uuid', '')
                 name = profile.get('name', uuid[:8])
 
                 QTimer.singleShot(0, lambda v=i+1: self.progress_bar.setValue(v))
                 QTimer.singleShot(0, lambda m=f"[{i+1}/{len(profiles_to_scan)}] {name}": self.progress_label.setText(m))
-                QTimer.singleShot(0, lambda m=f"Scanning {name}...": self.log(m, "info"))
 
-                # TODO: Implement actual page scanning via CDP
-                # This would involve:
-                # 1. Open browser with api.open_browser(uuid)
-                # 2. Navigate to facebook.com/pages
-                # 3. Extract page info using CDP
-                # 4. Save to database with sync_pages(uuid, pages_data)
+                # Scan pages cho profile này
+                pages_found = self._execute_page_scan_for_profile(uuid, name)
+                total_pages_found += len(pages_found)
 
-                # Simulate scan delay
-                import time
-                time.sleep(1)
-
-                # For demo, create mock pages
-                # In real implementation, this would be actual scanned data
+                # Lưu vào DB
+                if pages_found:
+                    sync_pages(uuid, pages_found)
 
             self._is_scanning = False
             QTimer.singleShot(0, lambda: self.progress_bar.setVisible(False))
             QTimer.singleShot(0, lambda: self.progress_label.setText(""))
-            QTimer.singleShot(0, lambda: self.log("Scan hoàn thành!", "success"))
+            QTimer.singleShot(0, lambda: self.log(f"Scan hoàn thành! Tìm thấy {total_pages_found} pages", "success"))
             QTimer.singleShot(0, self._filter_pages_by_profile)
 
         threading.Thread(target=do_scan, daemon=True).start()
+
+    def _execute_page_scan_for_profile(self, profile_uuid: str, profile_name: str):
+        """Quét pages cho 1 profile - MỞ BROWSER VÀ QUÉT THẬT"""
+        pages_found = []
+        slot_id = acquire_window_slot()
+
+        try:
+            # Mở browser
+            self.log(f"Mở browser {profile_name}...", "info")
+            result = api.open_browser(profile_uuid)
+
+            status = result.get('status') or result.get('type')
+            if status not in ['successfully', 'success', True]:
+                if 'already' not in str(result).lower():
+                    self.log(f"Không mở được browser: {result}", "error")
+                    release_window_slot(slot_id)
+                    return []
+
+            # Lấy CDP port
+            data = result.get('data', {})
+            remote_port = data.get('remote_port')
+            ws_url = data.get('web_socket', '')
+
+            if not remote_port:
+                match = re.search(r':(\d+)/', ws_url)
+                if match:
+                    remote_port = int(match.group(1))
+
+            if not remote_port:
+                self.log("Không lấy được CDP port", "error")
+                release_window_slot(slot_id)
+                return []
+
+            cdp_base = f"http://127.0.0.1:{remote_port}"
+            time.sleep(2)
+
+            # Lấy WebSocket
+            try:
+                resp = requests.get(f"{cdp_base}/json", timeout=10)
+                tabs = resp.json()
+            except Exception as e:
+                self.log(f"Lỗi CDP: {e}", "error")
+                release_window_slot(slot_id)
+                return []
+
+            page_ws = None
+            for tab in tabs:
+                if tab.get('type') == 'page':
+                    page_ws = tab.get('webSocketDebuggerUrl')
+                    break
+
+            if not page_ws:
+                release_window_slot(slot_id)
+                return []
+
+            try:
+                ws = websocket.create_connection(page_ws, timeout=30, suppress_origin=True)
+            except:
+                release_window_slot(slot_id)
+                return []
+
+            # Navigate đến trang pages
+            pages_url = "https://www.facebook.com/pages/?category=your_pages"
+            self.log("Đang vào trang Fanpages...", "info")
+
+            ws.send(json_module.dumps({
+                "id": 1,
+                "method": "Page.navigate",
+                "params": {"url": pages_url}
+            }))
+            ws.recv()
+            time.sleep(8)
+
+            # Lấy HTML
+            ws.send(json_module.dumps({
+                "id": 2,
+                "method": "Runtime.evaluate",
+                "params": {"expression": "document.documentElement.outerHTML"}
+            }))
+            html_result = json_module.loads(ws.recv())
+            html = html_result.get('result', {}).get('result', {}).get('value', '')
+
+            ws.close()
+
+            # Parse HTML
+            if html and BS4_AVAILABLE:
+                soup = BeautifulSoup(html, 'html.parser')
+
+                # Tìm các page links
+                page_links = soup.find_all('a', href=re.compile(r'facebook\.com/[^/]+/?$|/pages/[^/]+'))
+
+                seen_ids = set()
+                for link in page_links:
+                    href = link.get('href', '')
+
+                    # Lấy page ID hoặc username
+                    page_id = None
+                    if '/pages/' in href:
+                        match = re.search(r'/pages/([^/?]+)', href)
+                        if match:
+                            page_id = match.group(1)
+                    else:
+                        match = re.search(r'facebook\.com/([^/?]+)', href)
+                        if match:
+                            page_id = match.group(1)
+
+                    if page_id and page_id not in seen_ids and page_id not in ['groups', 'events', 'marketplace', 'watch', 'gaming']:
+                        seen_ids.add(page_id)
+
+                        # Lấy tên page
+                        page_name = link.get_text(strip=True) or f"Page {page_id}"
+
+                        pages_found.append({
+                            'page_id': page_id,
+                            'page_name': page_name[:100],
+                            'profile_uuid': profile_uuid,
+                            'follower_count': 0,
+                            'role': 'admin',
+                            'category': ''
+                        })
+
+                self.log(f"Tìm thấy {len(pages_found)} pages cho {profile_name}", "success")
+
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            self.log(f"Lỗi: {str(e)}", "error")
+        finally:
+            release_window_slot(slot_id)
+
+        return pages_found
 
     def _delete_selected_pages(self):
         """Xoa cac pages đã chọn"""
