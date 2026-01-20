@@ -1,6 +1,6 @@
 """
-Content Page - Quan ly noi dung dang bai
-PySide6 version - BEAUTIFUL UI like ProfilesPage
+Content Page - Quản lý nội dung đăng bài
+PySide6 version - BEAUTIFUL UI
 """
 import threading
 from typing import List, Dict
@@ -24,7 +24,7 @@ from db import (
 
 
 class ContentPage(QWidget):
-    """Content Page - Quan ly noi dung - BEAUTIFUL UI"""
+    """Content Page - Quản lý nội dung"""
 
     def __init__(self, log_func, parent=None):
         super().__init__(parent)
@@ -47,20 +47,20 @@ class ContentPage(QWidget):
         top_bar = QHBoxLayout()
         top_bar.setSpacing(12)
 
-        title = CyberTitle("Content", "Quan ly noi dung dang bai", "yellow")
+        title = CyberTitle("Soạn Tin", "Quản lý nội dung đăng bài", "yellow")
         top_bar.addWidget(title)
 
         top_bar.addStretch()
 
-        self.stat_categories = CyberStatCard("DANH MUC", "0", "📁", "yellow")
+        self.stat_categories = CyberStatCard("DANH MỤC", "0", "📁", "yellow")
         self.stat_categories.setFixedWidth(160)
         top_bar.addWidget(self.stat_categories)
 
-        self.stat_contents = CyberStatCard("NOI DUNG", "0", "📝", "cyan")
+        self.stat_contents = CyberStatCard("NỘI DUNG", "0", "📝", "cyan")
         self.stat_contents.setFixedWidth(160)
         top_bar.addWidget(self.stat_contents)
 
-        self.stat_selected = CyberStatCard("DA CHON", "0", "✓", "mint")
+        self.stat_selected = CyberStatCard("ĐÃ CHỌN", "0", "✓", "mint")
         self.stat_selected.setFixedWidth(160)
         top_bar.addWidget(self.stat_selected)
 
@@ -160,7 +160,7 @@ class ContentPage(QWidget):
         self.select_all_cb.stateChanged.connect(self._toggle_select_all)
         select_layout.addWidget(self.select_all_cb)
 
-        select_label = QLabel("Chon tat ca")
+        select_label = QLabel("Chọn tất cả")
         select_label.setStyleSheet(f"color: {COLORS['text_secondary']}; font-size: 12px;")
         select_label.setCursor(Qt.PointingHandCursor)
         select_label.mousePressEvent = lambda e: self.select_all_cb.setChecked(not self.select_all_cb.isChecked())
@@ -174,7 +174,7 @@ class ContentPage(QWidget):
         sep.setStyleSheet(f"background: {COLORS['border']};")
         content_header_layout.addWidget(sep)
 
-        content_title = QLabel("📝 NOI DUNG")
+        content_title = QLabel("📝 NỘI DUNG")
         content_title.setStyleSheet(f"color: {COLORS['neon_cyan']}; font-size: 12px; font-weight: bold; letter-spacing: 2px;")
         content_header_layout.addWidget(content_title)
 
@@ -202,7 +202,7 @@ class ContentPage(QWidget):
         middle_layout.addWidget(content_header)
 
         # Table
-        self.table = CyberTable(["✓", "TIEU DE", "NOI DUNG", "HINH"])
+        self.table = CyberTable(["✓", "TIÊU ĐỀ", "NỘI DUNG", "HÌNH"])
         self.table.setColumnWidth(0, 50)
         self.table.setColumnWidth(1, 200)
         self.table.setColumnWidth(2, 300)
@@ -257,22 +257,22 @@ class ContentPage(QWidget):
 
         # Title
         title_row = QHBoxLayout()
-        title_label = QLabel("Tieu de:")
+        title_label = QLabel("Tiêu đề:")
         title_label.setStyleSheet(f"color: {COLORS['text_secondary']}; font-size: 12px;")
         title_label.setFixedWidth(80)
         title_row.addWidget(title_label)
 
-        self.title_input = CyberInput("Nhap tieu de bai viet...")
+        self.title_input = CyberInput("Nhập tiêu đề bài viết...")
         title_row.addWidget(self.title_input)
         form_layout.addLayout(title_row)
 
         # Content
-        content_label = QLabel("Noi dung:")
+        content_label = QLabel("Nội dung:")
         content_label.setStyleSheet(f"color: {COLORS['text_secondary']}; font-size: 12px;")
         form_layout.addWidget(content_label)
 
         self.content_text = QTextEdit()
-        self.content_text.setPlaceholderText("Nhap noi dung bai viet...\n\nSu dung {name}, {time}, {date} de thay the tu dong...")
+        self.content_text.setPlaceholderText("Nhập nội dung bài viết...\n\nSử dụng {name}, {time}, {date} để thay thế tự động...")
         self.content_text.setStyleSheet(f"""
             QTextEdit {{
                 background: {COLORS['bg_card']};
@@ -289,13 +289,13 @@ class ContentPage(QWidget):
         form_layout.addWidget(self.content_text, 1)
 
         # Image
-        image_label = QLabel("Hinh anh:")
+        image_label = QLabel("Hình ảnh:")
         image_label.setStyleSheet(f"color: {COLORS['text_secondary']}; font-size: 12px;")
         form_layout.addWidget(image_label)
 
         image_row = QHBoxLayout()
 
-        self.image_input = CyberInput("Chon hinh anh...")
+        self.image_input = CyberInput("Chọn hình ảnh...")
         self.image_input.setReadOnly(True)
         image_row.addWidget(self.image_input, 1)
 
@@ -315,15 +315,19 @@ class ContentPage(QWidget):
         btn_row = QHBoxLayout()
         btn_row.setSpacing(8)
 
-        self.btn_save = CyberButton("LUU", "success", "💾")
+        self.btn_new = CyberButton("TẠO MỚI", "cyan", "➕")
+        self.btn_new.clicked.connect(self._add_content)
+        btn_row.addWidget(self.btn_new)
+
+        self.btn_save = CyberButton("LƯU", "success", "💾")
         self.btn_save.clicked.connect(self._save_content)
         btn_row.addWidget(self.btn_save)
 
-        self.btn_cancel = CyberButton("HUY", "ghost")
+        self.btn_cancel = CyberButton("HỦY", "ghost")
         self.btn_cancel.clicked.connect(self._clear_editor)
         btn_row.addWidget(self.btn_cancel)
 
-        self.btn_delete = CyberButton("XOA", "danger", "🗑️")
+        self.btn_delete = CyberButton("XÓA", "danger", "🗑️")
         self.btn_delete.clicked.connect(self._delete_content)
         btn_row.addWidget(self.btn_delete)
 
@@ -463,7 +467,7 @@ class ContentPage(QWidget):
 
         for row, content in enumerate(contents_to_show):
             content_id = content.get('id')
-            title = content.get('title', 'Khong co tieu de')
+            title = content.get('title', 'Không có tiêu đề')
             body = content.get('content', '')
             image = content.get('image_path', '')
 
@@ -496,7 +500,7 @@ class ContentPage(QWidget):
             image_item.setTextAlignment(Qt.AlignCenter)
             self.table.setItem(row, 3, image_item)
 
-        self.content_count_label.setText(f"[{len(contents_to_show)} noi dung]")
+        self.content_count_label.setText(f"[{len(contents_to_show)} nội dung]")
         self._update_stats()
 
     def _on_table_click(self, row, col):
@@ -534,16 +538,16 @@ class ContentPage(QWidget):
             self._load_data()
 
     def _delete_category(self, cat_id):
-        """Xoa category"""
+        """Xóa category"""
         reply = QMessageBox.question(
-            self, "Xac nhan xoa",
-            "Ban co chac muon xoa danh muc nay?\nTat ca noi dung trong danh muc se bi xoa!",
+            self, "Xác nhận xóa",
+            "Bạn có chắc muốn xóa danh mục này?\nTất cả nội dung trong danh mục sẽ bị xóa!",
             QMessageBox.Yes | QMessageBox.No
         )
 
         if reply == QMessageBox.Yes:
             delete_category(cat_id)
-            self.log("Da xoa danh muc", "success")
+            self.log("Đã xóa danh mục", "success")
             if self.current_category_id == cat_id:
                 self.current_category_id = None
                 self.contents = []
@@ -551,15 +555,16 @@ class ContentPage(QWidget):
             self._load_data()
 
     def _add_content(self):
-        """Them content moi"""
+        """Thêm content mới"""
         if not self.current_category_id:
-            QMessageBox.warning(self, "Thong bao", "Vui long chon danh muc truoc!")
+            QMessageBox.warning(self, "Thông báo", "Vui lòng chọn danh mục trước!")
             return
 
         self.editing_content = None
         self._clear_editor()
-        self.editing_label.setText("TAO MOI")
+        self.editing_label.setText("✨ TẠO MỚI")
         self.title_input.setFocus()
+        self.log("Đang tạo nội dung mới...", "info")
 
     def _edit_content(self, content: Dict):
         """Edit content"""
@@ -582,7 +587,7 @@ class ContentPage(QWidget):
         # Get category from combo
         cat_idx = self.cat_combo.currentIndex()
         if cat_idx < 0 or cat_idx >= len(self.categories):
-            QMessageBox.warning(self, "Loi", "Vui long chon danh muc!")
+            QMessageBox.warning(self, "Lỗi", "Vui lòng chọn danh mục!")
             return
 
         category_id = self.categories[cat_idx].get('id')
@@ -590,7 +595,7 @@ class ContentPage(QWidget):
         content_text = self.content_text.toPlainText().strip()
 
         if not title:
-            QMessageBox.warning(self, "Loi", "Vui long nhap tieu de!")
+            QMessageBox.warning(self, "Lỗi", "Vui lòng nhập tiêu đề!")
             return
 
         data = {
@@ -604,7 +609,7 @@ class ContentPage(QWidget):
             data['id'] = self.editing_content.get('id')
 
         save_content(data)
-        self.log(f"Da luu: {title}", "success")
+        self.log(f"Đã lưu: {title}", "success")
 
         # Refresh
         self.current_category_id = category_id
@@ -615,18 +620,18 @@ class ContentPage(QWidget):
     def _delete_content(self):
         """Xoa content"""
         if not self.editing_content:
-            QMessageBox.warning(self, "Thong bao", "Chua chon noi dung de xoa!")
+            QMessageBox.warning(self, "Thông báo", "Chưa chọn nội dung để xóa!")
             return
 
         reply = QMessageBox.question(
-            self, "Xac nhan xoa",
-            f"Ban co chac muon xoa '{self.editing_content.get('title')}'?",
+            self, "Xác nhận xóa",
+            f"Bạn có chắc muốn xóa '{self.editing_content.get('title')}'?",
             QMessageBox.Yes | QMessageBox.No
         )
 
         if reply == QMessageBox.Yes:
             delete_content(self.editing_content.get('id'))
-            self.log("Da xoa noi dung", "success")
+            self.log("Đã xóa nội dung", "success")
             self._clear_editor()
             self._load_contents()
             self._render_categories()
@@ -640,9 +645,9 @@ class ContentPage(QWidget):
         self.image_input.clear()
 
     def _browse_image(self):
-        """Chon hinh anh"""
+        """Chọn hình ảnh"""
         path, _ = QFileDialog.getOpenFileName(
-            self, "Chon hinh anh",
+            self, "Chọn hình ảnh",
             "", "Images (*.png *.jpg *.jpeg *.gif *.webp)"
         )
 
@@ -657,13 +662,13 @@ class ContentPage(QWidget):
             cb.setChecked(checked)
             if checked:
                 count += 1
-        self.selected_label.setText(f"✓ {count} da chon" if checked else "")
+        self.selected_label.setText(f"✓ {count} đã chọn" if checked else "")
         self.stat_selected.set_value(str(count))
 
     def _update_selection_count(self):
         """Update selection count"""
         count = sum(1 for cb in self.content_checkboxes.values() if cb.isChecked())
-        self.selected_label.setText(f"✓ {count} da chon" if count > 0 else "")
+        self.selected_label.setText(f"✓ {count} đã chọn" if count > 0 else "")
         self.stat_selected.set_value(str(count))
 
     def _update_stats(self):
