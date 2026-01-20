@@ -1092,26 +1092,72 @@ class GroupsPage(QWidget):
             groups_url = "https://www.facebook.com/groups/joins/?nav_source=tab&ordering=viewer_added"
             self.signal.log_message.emit("Đang vào trang nhóm Facebook...", "info")
 
-            ws.send(json_module.dumps({
-                "id": 1,
-                "method": "Page.navigate",
-                "params": {"url": groups_url}
-            }))
-            ws.recv()
+            msg_id = [0]
+            def send_cdp(method, params=None):
+                msg_id[0] += 1
+                msg = {"id": msg_id[0], "method": method}
+                if params:
+                    msg["params"] = params
+                ws.send(json_module.dumps(msg))
+                return json_module.loads(ws.recv())
+
+            send_cdp("Page.navigate", {"url": groups_url})
 
             # Đợi trang load
-            time.sleep(8)
+            time.sleep(5)
 
-            # Bước 4: Lấy HTML và parse
+            # Bước 4: CUỘN TRANG để load tất cả nhóm
+            self.signal.log_message.emit("Đang cuộn trang để tải tất cả nhóm...", "info")
+
+            # Cuộn xuống nhiều lần để load lazy content
+            scroll_script = """
+            (function() {
+                return new Promise((resolve) => {
+                    let totalHeight = 0;
+                    let distance = 500;
+                    let scrolls = 0;
+                    let maxScrolls = 20;  // Cuộn tối đa 20 lần
+
+                    let timer = setInterval(() => {
+                        window.scrollBy(0, distance);
+                        totalHeight += distance;
+                        scrolls++;
+
+                        // Dừng nếu đã cuộn đủ hoặc đến cuối trang
+                        if (scrolls >= maxScrolls || (window.innerHeight + window.scrollY) >= document.body.scrollHeight - 100) {
+                            clearInterval(timer);
+                            // Cuộn lên đầu
+                            window.scrollTo(0, 0);
+                            resolve('done');
+                        }
+                    }, 300);
+
+                    // Timeout sau 10 giây
+                    setTimeout(() => {
+                        clearInterval(timer);
+                        window.scrollTo(0, 0);
+                        resolve('timeout');
+                    }, 10000);
+                });
+            })()
+            """
+
+            # Chạy scroll script
+            send_cdp("Runtime.evaluate", {
+                "expression": scroll_script,
+                "awaitPromise": True
+            })
+
+            # Đợi thêm để DOM ổn định
+            time.sleep(2)
+
+            # Bước 5: Lấy HTML và parse
             self.signal.log_message.emit("Đang quét danh sách nhóm...", "info")
 
-            ws.send(json_module.dumps({
-                "id": 2,
-                "method": "Runtime.evaluate",
-                "params": {"expression": "document.documentElement.outerHTML"}
-            }))
-            html_result = json_module.loads(ws.recv())
-            html = html_result.get('result', {}).get('result', {}).get('value', '')
+            result = send_cdp("Runtime.evaluate", {
+                "expression": "document.documentElement.outerHTML"
+            })
+            html = result.get('result', {}).get('result', {}).get('value', '')
 
             ws.close()
 
@@ -1120,19 +1166,45 @@ class GroupsPage(QWidget):
                 soup = BeautifulSoup(html, 'html.parser')
 
                 # Tìm các nhóm - Facebook dùng nhiều pattern khác nhau
+                # Pattern 1: Link trực tiếp đến /groups/ID
                 group_links = soup.find_all('a', href=re.compile(r'/groups/\d+'))
+
+                # Pattern 2: Tìm trong các div có role="article" hoặc data-pagelet
+                articles = soup.find_all(['div', 'article'], attrs={'role': 'article'})
+                for article in articles:
+                    links = article.find_all('a', href=re.compile(r'/groups/'))
+                    group_links.extend(links)
 
                 seen_ids = set()
                 for link in group_links:
                     href = link.get('href', '')
+
+                    # Lấy group ID từ nhiều pattern
                     match = re.search(r'/groups/(\d+)', href)
+                    if not match:
+                        # Thử pattern khác: /groups/name.id hoặc /groups/name/
+                        match = re.search(r'/groups/([^/?]+)', href)
+
                     if match:
                         group_id = match.group(1)
+
+                        # Bỏ qua các link không phải nhóm
+                        if group_id in ['joins', 'feed', 'discover', 'create', 'settings']:
+                            continue
+
                         if group_id not in seen_ids:
                             seen_ids.add(group_id)
 
-                            # Lấy tên nhóm
-                            name = link.get_text(strip=True) or f"Nhóm {group_id}"
+                            # Lấy tên nhóm - tìm trong parent elements
+                            name = link.get_text(strip=True)
+                            if not name or len(name) < 3:
+                                # Tìm trong các element gần đó
+                                parent = link.find_parent(['div', 'span'])
+                                if parent:
+                                    name = parent.get_text(strip=True)[:100]
+
+                            if not name or len(name) < 3:
+                                name = f"Nhóm {group_id}"
 
                             groups_found.append({
                                 'profile_uuid': profile_uuid,
@@ -1143,6 +1215,8 @@ class GroupsPage(QWidget):
                             })
 
                 self.signal.log_message.emit(f"Tìm thấy {len(groups_found)} nhóm", "success")
+            else:
+                self.signal.log_message.emit("Không có HTML hoặc BeautifulSoup", "warning")
 
         except Exception as e:
             import traceback
@@ -1165,6 +1239,15 @@ class GroupsPage(QWidget):
         self.btn_scan.setEnabled(True)
         self.btn_stop_scan.setEnabled(False)
         self.scan_progress.setValue(100)
+
+        # QUAN TRỌNG: Reload groups từ DB và render lại UI
+        if self.selected_profile_uuids:
+            self.groups = get_groups_for_profiles(self.selected_profile_uuids)
+            self._render_scan_groups()
+            self._render_post_groups()
+            self.stat_groups.set_value(str(len(self.groups)))
+            self.scan_stats.setText(f"Tổng: {len(self.groups)} nhóm")
+
         self.log("Quét nhóm hoàn tất!", "success")
 
     def _clear_all_groups(self):
