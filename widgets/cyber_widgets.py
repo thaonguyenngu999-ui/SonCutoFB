@@ -47,6 +47,9 @@ class CyberButton(QPushButton):
         self.setGraphicsEffect(self.glow)
     
     def _apply_style(self):
+        # Text color khi hover - dùng màu tối cho nền sáng
+        hover_text = "#0a0a14" if self.variant != "ghost" else COLORS["text_primary"]
+
         self.setStyleSheet(f"""
             QPushButton {{
                 background: transparent;
@@ -56,11 +59,17 @@ class CyberButton(QPushButton):
                 padding: 4px 14px;
                 font-weight: bold;
                 font-size: 11px;
+                text-shadow: 0 0 8px {self.color1};
             }}
             QPushButton:hover {{
                 background: qlineargradient(x1:0, x2:1, stop:0 {self.color1}, stop:1 {self.color2});
-                border-color: transparent;
-                color: #0c0c18;
+                border-color: {self.color1};
+                color: {hover_text};
+                text-shadow: none;
+            }}
+            QPushButton:pressed {{
+                background: {self.color1};
+                color: {hover_text};
             }}
         """)
     
